@@ -136,6 +136,43 @@ function ratioKind(){return ($('rp')&&$('rp').value)||''}
 function isMayerRatio(kind, ma, len){
   return kind==='mayer'||(ma==='SMA'&&+len===200);
 }
+
+function weeklySmaOnDaily(daily, weeks){
+  const rows=daily.map(b=>[b.time,b.open,b.high,b.low,b.close,b.volume||0]);
+  const off=345600;
+  const weeksRows=typeof aggregate==='function'?aggregate(rows,604800,off):[];
+  const sma=TA.SMA(weeksRows.map(r=>r[4]),weeks);
+  const pts=weeksRows.map((r,i)=>({time:r[0],value:sma[i]}));
+  let j=0;
+  return daily.map(b=>{
+    while(j+1<pts.length && pts[j+1].time<=b.time) j++;
+    const p=pts[j];
+    if(!p||p.time>b.time||!(p.value>0)) return null;
+    return p.value;
+  });
+}
+function maSpec(kind){
+  if(kind==='200d'||kind==='mayer') return {kind:'200d',days:200,title:'Mayer Multiple',source:'200-day SMA',name:'200-day SMA'};
+  if(kind==='100w') return {kind:'100w',weeks:100,title:'Price / 100-week SMA',source:'100-week SMA',name:'100-week SMA'};
+  if(kind==='200w') return {kind:'200w',weeks:200,title:'Price / 200-week SMA',source:'200-week SMA',name:'200-week SMA'};
+  return null;
+}
+function overlayForMa(daily, kind){
+  const spec=maSpec(kind);
+  if(!spec) return null;
+  if(spec.days) return {spec, values:TA.SMA(daily.map(b=>b.close),spec.days)};
+  return {spec, values:weeklySmaOnDaily(daily,spec.weeks)};
+}
+function percentiles(values, ps){
+  const a=values.filter(v=>v!=null&&isFinite(v)&&v>0).slice().sort((x,y)=>x-y);
+  if(!a.length) return ps.map(()=>null);
+  return ps.map(p=>{
+    const i=(a.length-1)*p/100;
+    const lo=Math.floor(i), hi=Math.ceil(i);
+    return a[lo]+(hi>lo?(a[hi]-a[lo])*(i-lo):0);
+  });
+}
+
 function computeRatio(bars, kind){
   kind=kind||ratioKind();
   lastRatio=null;
@@ -151,6 +188,9 @@ function computeRatio(bars, kind){
     source=len+'-day '+ma;
     if(isMayerRatio(kind,ma,len)){title='Mayer Multiple';short='Mayer Multiple'}
     else{title='Price / '+source;short=title}
+  }else if(kind==='200d'||kind==='100w'||kind==='200w'){
+    const ov=overlayForMa(bars,kind); if(!ov) return null;
+    overlay=ov.values; title=ov.spec.title; short=ov.spec.title; source=ov.spec.source; ma='SMA'; len=ov.spec.days||ov.spec.weeks;
   }else if(kind==='pl'){
     const sample=bars.filter(b=>b&&b.close>0);
     const fit=typeof fitPowerLaw==='function'?fitPowerLaw(sample):null;
@@ -548,12 +588,13 @@ async function composeScoutImage(){
   return canvas;
 }
 
-function renderScout(kind){
+async function renderScout(kind){
   kind=kind||scoutView();
   if(kind==='powerlaw'){renderPowerLawView();return true}
   if(kind==='drawdown'){renderDrawdownView();return true}
   if(kind==='ath'){renderAthView();return true}
   if(kind==='sats'){renderSatsView();return true}
+  if(kind==='pricema'){await renderPriceMaView();return true}
   return false;
 }
 
@@ -793,5 +834,132 @@ function renderSatsView(){
   });
   ch.timeScale().fitContent();
   setTimeout(()=>ch.timeScale().fitContent(),50);
+}
+
+
+
+async function scoutDailyBars(){
+  const raw=await getDaily(currentMarket());
+  let all=raw.map(toBar).filter(b=>b&&b.close>0);
+  if(bars.length){
+    const t1=bars.at(-1).time;
+    all=all.filter(b=>b.time<=t1+12*3600);
+  }
+  return all;
+}
+function sliceDisplay(all){
+  if(!bars.length||!all.length) return all;
+  const t0=bars[0].time;
+  const cut=all.filter(b=>b.time>=t0);
+  return cut.length?cut:all;
+}
+
+const PCT_BANDS=[
+  {lo:80,hi:100,color:'#e53935',name:'>80th'},
+  {lo:60,hi:80,color:'#ef6c00',name:'60–80th'},
+  {lo:40,hi:60,color:'#f9a825',name:'40–60th'},
+  {lo:20,hi:40,color:'#2e7d32',name:'20–40th'},
+  {lo:0,hi:20,color:'#1565c0',name:'<20th'},
+];
+const PCT_LINE_COLORS={20:'#1565c0',40:'#2e7d32',60:'#c9a000',80:'#ef6c00'};
+
+function bandForRatio(v, pctVals){
+  if(v==null||!pctVals) return 2;
+  if(v>=pctVals[3]) return 0;
+  if(v>=pctVals[2]) return 1;
+  if(v>=pctVals[1]) return 2;
+  if(v>=pctVals[0]) return 3;
+  return 4;
+}
+
+async function renderPriceMaView(){
+  clearCharts();
+  document.body.classList.add('scout-view','scout-pricema');
+  $('charts').classList.remove('has-volume');
+  const kind=($('pma')&&$('pma').value)||'200d';
+  const mode=($('pmm')&&$('pmm').value)||'panel';
+  const daily=await scoutDailyBars();
+  const shown=sliceDisplay(daily);
+  const ratio=computeRatio(shown, kind) || computeRatio(daily, kind);
+  // Recompute ratio on `shown` but overlay needs warmup from `daily`
+  const ov=overlayForMa(daily, kind);
+  const spec=ov&&ov.spec;
+  let points=[];
+  if(ov){
+    const idx=new Map(daily.map((b,i)=>[b.time,i]));
+    for(const b of shown){
+      const i=idx.get(b.time); if(i==null) continue;
+      const o=ov.values[i];
+      if(!(o>0)||!(b.close>0)) continue;
+      points.push({time:b.time,value:b.close/o,overlay:o,close:b.close});
+    }
+  }
+  if(points.length<2){status('Not enough data for this moving average.');return}
+  const computed={kind,title:spec.title,short:spec.title,source:spec.source,overlay:ov.values,points,last:points.at(-1)};
+  lastRatio=computed;
+  const pctVals=percentiles(points.map(p=>p.value),[20,40,60,80]);
+  window.lastScout={kind:'pricema',mode,spec,computed,pctVals,shown};
+
+  const main=$('main');
+  main.innerHTML='';
+  $('subs').innerHTML='';
+
+  if(mode==='osc'){
+    setEpochLegend(false);
+    const ch=mkChart(main,{localization:{priceFormatter:v=>formatRatioValue(v)}});
+    charts.push(ch);
+    ch.priceScale('right').applyOptions({mode:LW.PriceScaleMode.Logarithmic,scaleMargins:{top:.08,bottom:.08},minimumWidth:80});
+    const groups=PCT_BANDS.map(()=>[]);
+    for(const p of points) groups[bandForRatio(p.value,pctVals)].push({time:p.time,value:p.value});
+    PCT_BANDS.forEach((b,i)=>{
+      if(!groups[i].length) return;
+      const s=ch.addLineSeries({
+        color:b.color,lineWidth:0,lineVisible:false,
+        pointMarkersVisible:true,pointMarkersRadius:3,
+        priceLineVisible:false,lastValueVisible:false,title:'',
+      });
+      s.setData(groups[i]);
+    });
+    [20,40,60,80].forEach((p,i)=>{
+      const v=pctVals[i]; if(!(v>0)) return;
+      const dummy=ch.addLineSeries({color:PCT_LINE_COLORS[p],lineWidth:0,lineVisible:false,priceLineVisible:false,lastValueVisible:false});
+      dummy.setData([{time:points[0].time,value:v},{time:points.at(-1).time,value:v}]);
+      dummy.createPriceLine({price:v,color:PCT_LINE_COLORS[p],lineWidth:1,lineStyle:2,axisLabelVisible:true,title:p+'th '+formatRatioValue(v)});
+    });
+    hookLegend(ch,t=>{
+      const p=points.find(x=>x.time===t); if(!p) return '';
+      const band=PCT_BANDS[bandForRatio(p.value,pctVals)];
+      return isoUTC(t)+'  ·  $'+usd(p.close)+'  ·  '+computed.title+' '+formatRatioValue(p.value)+(band?'  ·  '+band.name:'');
+    });
+    const legendItems=PCT_BANDS.map((b,i)=>'<span class="leg-item"><span class="swatch" style="background:'+b.color+'"></span>'+b.name+' '+(pctVals[4-i-1]!=null&&false?'':'')+'</span>').join('');
+    // percentile line legend
+    const pl=$('epochLegend');
+    if(pl){
+      pl.hidden=false;
+      pl.innerHTML=[20,40,60,80].map((p,i)=>'<span class="leg-item"><span class="swatch" style="background:'+PCT_LINE_COLORS[p]+'"></span>'+p+'th '+formatRatioValue(pctVals[i])+'</span>').join('');
+    }
+    ch.timeScale().fitContent();
+    setTimeout(()=>ch.timeScale().fitContent(),50);
+    return;
+  }
+
+  // two-panel
+  const ch=mkChart(main,{localization:{priceFormatter:compact}});
+  charts.push(ch);
+  ch.priceScale('right').applyOptions({mode:LW.PriceScaleMode.Logarithmic,scaleMargins:{top:.06,bottom:.08}});
+  addEpochLineSeries(ch, shown.map(b=>({time:b.time,value:b.close})),{lineWidth:2,lastValueVisible:true});
+  setEpochLegend(true);
+  const maPts=shown.map((b,i)=>{
+    const p=points.find(x=>x.time===b.time);
+    return p?{time:b.time,value:p.overlay}:{time:b.time};
+  }).filter(p=>p.value!=null);
+  ch.addLineSeries({color:'#e53935',lineWidth:2,priceLineVisible:false,lastValueVisible:false,title:spec.name}).setData(maPts);
+  addRatioPanel(computed,{log:true,big:true});
+  hookLegend(ch,t=>{
+    const b=shown.find(x=>x.time===t); if(!b) return '';
+    const p=points.find(x=>x.time===t);
+    return isoUTC(t)+'  ·  $'+usd(b.close)+(p?'  ·  '+spec.name+' $'+usd(p.overlay)+'  ·  '+computed.title+' '+formatRatioValue(p.value):'');
+  });
+  syncScoutLw();
 }
 

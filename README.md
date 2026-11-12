@@ -16,3 +16,4 @@ Static bitcoincharts.com-style chart page.
 - Ratio panel: when an overlay is on the main chart (MA 1, MA 2, or the Power Law line), a Ratio panel option (`rp`, plus `rpl` for a log Y axis) shows price / that line with a dashed 1.0. Price / 200-day SMA is labeled Mayer Multiple.
 - View selector (`vt`): dedicated scout charts start with Power Law, which plots log price vs days since genesis with the fitted line, a dashed projection to ~2030, the equation and R² on the chart, plus Price/Power Law (via the generic ratio helper) and Years Ahead panels.
 - More views in the View selector: Drawdown from ATH (`vtgdrawdown`), ATHs and days between (`vtgath`), and Sats per dollar (`vtgsats`).
+- Price / MA view (`vtgpricema`): epoch-colored log price with a 200-day, 100-week, or 200-week SMA and a Price/MA ratio panel (Mayer Multiple for the 200-day). A percentile oscillator mode colors the ratio by 20/40/60/80th bands. Hash: `pma`, `pmm`.

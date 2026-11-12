@@ -92,8 +92,20 @@
       <option value="drawdown">Drawdown from ATH</option>
       <option value="ath">ATHs and days between</option>
       <option value="sats">Sats per dollar</option>
+      <option value="pricema">Price / MA</option>
     </select>
   </label>
+  <span id="priceMaOpts" class="scout-opts" hidden>
+    <label>MA <select id="pma">
+      <option value="200d" selected>200-day</option>
+      <option value="100w">100-week</option>
+      <option value="200w">200-week</option>
+    </select></label>
+    <label>Style <select id="pmm">
+      <option value="panel" selected>Price + ratio</option>
+      <option value="osc">Percentile oscillator</option>
+    </select></label>
+  </span>
   <span id="markerBox" class="price-only">
     <label><input type="checkbox" id="ch">Cycle highs</label>
     <label><input type="checkbox" id="cl">Cycle lows</label>
