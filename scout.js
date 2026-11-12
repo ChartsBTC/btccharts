@@ -948,6 +948,7 @@ async function renderScout(kind){
   if(kind==='calyear'){await renderCalYearView();return true}
   if(kind==='onthisday'){await renderOnThisDayView();return true}
   if(kind==='hcycles'){await renderHcyclesView();return true}
+  if(kind==='ranges'){await renderRangesView();return true}
   return false;
 }
 
@@ -2229,3 +2230,169 @@ async function renderHcyclesView(){
   }
 }
 window.renderHcyclesView=renderHcyclesView;
+
+function rangeBandMode(){return ($('rb')&&$('rb').value)==='pow2'?'pow2':'decade'}
+function makePriceBands(mode, minP, maxP){
+  const bands=[];
+  if(mode==='pow2'){
+    let lo=1;
+    const top=Math.max(1, maxP);
+    while(lo<top*2){
+      const hi=lo*2;
+      bands.push({lo, hi: hi>top*1.01?Infinity:hi, open:hi>top*1.01});
+      if(!isFinite(bands.at(-1).hi)||bands.at(-1).open) break;
+      lo=hi;
+      if(lo>1e9) break;
+    }
+  }else{
+    let lo=1;
+    while(lo<=1e8){
+      const hi=lo*10;
+      const open=lo>=100000;
+      bands.push({lo, hi:open?Infinity:hi, open});
+      if(open) break;
+      lo=hi;
+    }
+  }
+  return bands.filter(b=>maxP>=b.lo && minP< (isFinite(b.hi)?b.hi:Infinity)*10);
+}
+function countDaysInBands(daily, bands){
+  const counts=bands.map(()=>0);
+  for(const b of daily){
+    const p=b.close;
+    if(!(p>0)) continue;
+    for(let i=0;i<bands.length;i++){
+      const bd=bands[i];
+      if(p>=bd.lo && (bd.open||p<bd.hi)){counts[i]++;break}
+    }
+  }
+  return counts;
+}
+function formatBandEdge(v){
+  if(!isFinite(v)) return '';
+  if(v>=1e6) return '$'+(v/1e6).toLocaleString('en-US',{maximumFractionDigits:2}).replace(/\.0$/,'')+'M';
+  if(v>=1000) return '$'+Math.round(v).toLocaleString('en-US');
+  return '$'+String(v);
+}
+function bandLabel(band, days, mode){
+  if(mode==='pow2' || band.open || band.lo<=1) return days+' days';
+  return days+' days between '+formatBandEdge(band.lo)+' and '+formatBandEdge(band.hi);
+}
+
+async function renderRangesView(){
+  clearCharts();
+  document.body.classList.add('scout-view','scout-ranges');
+  $('charts').classList.remove('has-volume');
+  const daily=await scoutDailyBars();
+  const pts=daily.filter(b=>b&&b.close>0);
+  if(pts.length<2){status('Not enough data for price-range days.');return}
+  const mode=rangeBandMode();
+  const minP=Math.min(...pts.map(b=>b.close));
+  const maxP=Math.max(...pts.map(b=>b.close));
+  const bands=makePriceBands(mode, minP, maxP);
+  const counts=countDaysInBands(pts, bands);
+  window.lastScout={kind:'ranges',mode,bands,counts,pts};
+  const longest=Math.max(0,...counts);
+  status(pts.length+' daily closes · '+bands.length+' '+ (mode==='pow2'?'power-of-2':'order-of-magnitude')+' bands · longest '+longest+' days');
+  const main=$('main');
+  main.innerHTML='';
+  $('subs').innerHTML='';
+  setEpochLegend(false);
+
+  attachPaintCanvas(main,(ctx,w,h)=>{
+    const th=T();
+    const dark=typeof isDark==='function'&&isDark();
+    ctx.fillStyle=th.bg; ctx.fillRect(0,0,w,h);
+    const padL=72, padR=20, padT=28, padB=40;
+    const plotW=w-padL-padR, plotH=h-padT-padB;
+    if(plotW<80||plotH<80) return;
+    const t0=pts[0].time, t1=pts.at(-1).time;
+    const yMin=Math.max(0.5, Math.pow(10, Math.floor(Math.log10(minP))));
+    const yMax=Math.pow(10, Math.ceil(Math.log10(maxP*1.05)));
+    const dayMax=Math.max(365, Math.ceil(longest/365)*365 + 365);
+    const xTime=t=>padL+plotW*((t-t0)/Math.max(1,t1-t0));
+    const xDays=d=>padL+plotW*(d/dayMax);
+    const yOf=v=>{
+      const a=Math.log10(yMin), b=Math.log10(yMax);
+      return padT+plotH*(1-(Math.log10(v)-a)/(b-a));
+    };
+    // horizontal grid + left labels
+    ctx.font='11px Verdana,Arial,sans-serif';
+    ctx.textAlign='right'; ctx.textBaseline='middle';
+    const yTicks=[];
+    if(mode==='pow2'){
+      for(let v=1;v<=yMax;v*=2) yTicks.push(v);
+    }else{
+      for(let e=0;e<=8;e++) yTicks.push(Math.pow(10,e));
+    }
+    for(const v of yTicks){
+      if(v<yMin*0.999||v>yMax*1.001) continue;
+      const y=yOf(v);
+      ctx.strokeStyle=th.grid; ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(padL+plotW,y); ctx.stroke();
+      ctx.fillStyle=th.text; ctx.fillText(formatBandEdge(v), padL-8, y);
+    }
+    // bottom date axis
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillStyle=th.text;
+    const y0=new Date(t0*1000).getUTCFullYear();
+    const y1=new Date(t1*1000).getUTCFullYear();
+    const step=(y1-y0>12)?2:1;
+    for(let y=y0;y<=y1;y+=step){
+      const t=Date.UTC(y,0,1)/1000;
+      if(t<t0||t>t1) continue;
+      const x=xTime(t);
+      ctx.strokeStyle=th.grid; ctx.beginPath(); ctx.moveTo(x,padT); ctx.lineTo(x,padT+plotH); ctx.stroke();
+      ctx.fillStyle=th.text; ctx.fillText(String(y), x, padT+plotH+8);
+    }
+    // top days axis
+    ctx.textBaseline='bottom';
+    for(let d=0;d<=dayMax;d+=365){
+      const x=xDays(d);
+      ctx.strokeStyle=th.grid; ctx.beginPath(); ctx.moveTo(x,padT); ctx.lineTo(x,padT+plotH); ctx.stroke();
+      ctx.fillStyle=th.muted||th.text; ctx.fillText(String(d), x, padT-4);
+    }
+    ctx.strokeStyle=th.border; ctx.strokeRect(padL,padT,plotW,plotH);
+
+    // bars
+    const barFill=dark?'rgba(200,200,200,0.28)':'rgba(80,80,80,0.22)';
+    const barStroke=dark?'rgba(220,220,220,0.45)':'rgba(60,60,60,0.35)';
+    bands.forEach((bd,i)=>{
+      const days=counts[i];
+      if(!days) return;
+      const top=bd.open?yOf(yMax):yOf(Math.min(bd.hi, yMax));
+      const bot=yOf(Math.max(bd.lo, yMin));
+      const y=Math.min(top,bot), hgt=Math.max(2, Math.abs(bot-top));
+      const x0=padL, bw=Math.max(1, xDays(days)-padL);
+      ctx.fillStyle=barFill;
+      ctx.fillRect(x0, y, bw, hgt);
+      ctx.strokeStyle=barStroke; ctx.lineWidth=1;
+      ctx.strokeRect(x0, y, bw, hgt);
+      const text=bandLabel(bd, days, mode);
+      ctx.font='bold 12px Verdana,Arial,sans-serif';
+      ctx.fillStyle=th.text;
+      ctx.textAlign='left'; ctx.textBaseline='middle';
+      const tw=ctx.measureText(text).width;
+      if(bw>tw+16) ctx.fillText(text, x0+8, y+hgt/2);
+      else ctx.fillText(text, x0+bw+8, y+hgt/2);
+    });
+
+    // price line on top
+    ctx.strokeStyle=dark?'#e879f9':'#c026d3';
+    ctx.lineWidth=1.6; ctx.lineJoin='round'; ctx.lineCap='round';
+    ctx.beginPath();
+    let started=false;
+    for(const b of pts){
+      const x=xTime(b.time), y=yOf(Math.max(yMin, b.close));
+      if(!started){ctx.moveTo(x,y);started=true}else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+
+    ctx.fillStyle=th.muted||th.text;
+    ctx.font='10px Verdana,Arial,sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.fillText('Date', padL+plotW/2, h-4);
+  });
+}
+window.renderRangesView=renderRangesView;
+window.rangeBandMode=rangeBandMode;
+window.formatBandEdge=formatBandEdge;

@@ -171,6 +171,11 @@ body.scout-onthisday.has-otd-table #main{height:680px}
 body.scout-hcycles #scaleToggle,body.scout-hcycles #markerBox,body.scout-hcycles #ratioBox,body.scout-hcycles #ratioLogBox{display:none}
 body.scout-hcycles #main{height:540px}
 body.scout-hcycles #chartWatermark{bottom:52px}
+
+body.scout-ranges #rangeOpts{display:inline-flex}
+body.scout-ranges #scaleToggle,body.scout-ranges #markerBox,body.scout-ranges #ratioBox,body.scout-ranges #ratioLogBox{display:none}
+body.scout-ranges #main{height:560px}
+body.scout-ranges #chartWatermark{bottom:52px}
 .otd-wrap{padding:8px 12px 12px;border-top:1px solid var(--chart-border,#ccc)}
 .otd-table{margin:0;border-collapse:collapse;font-size:12px}
 .otd-table th,.otd-table td{border:1px solid var(--table-border,#ccc);padding:4px 10px;text-align:right}
@@ -199,6 +204,7 @@ body.page-classic #priceMaOpts,
 body.page-classic #returnsOpts,
 body.page-classic #yearOpts,
 body.page-classic #otdOpts,
+body.page-classic #rangeOpts,
 body.page-classic #scaleToggle [data-scale="loglog"],
 body.page-classic label:has(#da),
 body.page-classic #r optgroup,

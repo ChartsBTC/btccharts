@@ -2,7 +2,7 @@ const $=id=>document.getElementById(id);
 const LW=LightweightCharts;
 
 const PUBLIC_CHART_BASE='https://chartsbtc.github.io/btccharts/';
-const ADVANCED_HASH_IDS=['cy','ll','pl','vt','rp','rpl','ep','ch','cl','hv','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','da','ca','cp','ym','otd','ott'];
+const ADVANCED_HASH_IDS=['cy','ll','pl','vt','rp','rpl','ep','ch','cl','hv','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','da','ca','cp','ym','otd','ott','rb'];
 function isClassicPage(){return window.CHART_PAGE==='classic'}
 function isAdvancedPage(){return window.CHART_PAGE==='advanced'}
 function hashHasAdvanced(hash){
@@ -74,7 +74,7 @@ function initTheme(){
 }
 
 
-const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','da','cy','ca','cp','ch','cl','hv','ll','pl','ep','rp','rpl','vt','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','ym','otd','ott'];
+const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','da','cy','ca','cp','ch','cl','hv','ll','pl','ep','rp','rpl','vt','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','ym','otd','ott','rb'];
 // populate indicator selects (only implemented ones, original naming)
 document.querySelectorAll('select.ind').forEach(s=>{s.innerHTML='<option value="">None</option>'+Object.entries(INDICATORS).map(([k,v])=>`<option value="${k}">${v.label.replace(/ \(.*/,'')}</option>`).join('')});
 
@@ -86,7 +86,7 @@ function buildHash(){const h=[];const skip=isClassicPage()?new Set(ADVANCED_HASH
   return h.join('z')}
 function parseHash(hash){ if(!hash)return;
   // reset everything to blank/unchecked; hash fully describes state (original reset v,t,r)
-  for(const id of FIELDS){const e=$(id);if(!e)continue;if(id==='m'){e.value='combinedUSD';continue}if(e.type==='checkbox')e.checked=false;else e.value=({m1:'10',m2:'25',ca:'low',cp:'usd',pma:'200d',pmm:'panel',rm:'cagr',rn:'4',pb:'1, 5, 20, 50, 80, 95, 99',blw:'50',ym:'raw'})[id]||''}
+  for(const id of FIELDS){const e=$(id);if(!e)continue;if(id==='m'){e.value='combinedUSD';continue}if(e.type==='checkbox')e.checked=false;else e.value=({m1:'10',m2:'25',ca:'low',cp:'usd',pma:'200d',pmm:'panel',rm:'cagr',rn:'4',pb:'1, 5, 20, 50, 80, 95, 99',blw:'50',ym:'raw',rb:'decade'})[id]||''}
   // Longest-id match so values may contain "g" (e.g. mgmtgoxUSD). The original split("g") would turn that into mtogxUSD.
   const ids=FIELDS.slice().sort((a,b)=>b.length-a.length);
   for(const part of hash.split('z')){const id=ids.find(x=>part===x||part.startsWith(x+'g'));if(!id)continue;const e=$(id);
@@ -109,6 +109,7 @@ function syncViewToggle(){
   document.body.classList.toggle('scout-calyear',vt==='calyear' && !on);
   document.body.classList.toggle('scout-onthisday',vt==='onthisday' && !on);
   document.body.classList.toggle('scout-hcycles',vt==='hcycles' && !on);
+  document.body.classList.toggle('scout-ranges',vt==='ranges' && !on);
   if(vt==='onthisday' && typeof syncOnThisDayUi==='function') syncOnThisDayUi();
   document.body.classList.toggle('mode-mult',vt==='returns' && ($('rm')&&$('rm').value==='mult') && !on);
   document.querySelectorAll('#viewToggle button').forEach(b=>b.classList.toggle('on',(b.dataset.cy==='1')===on && !vt));
@@ -118,6 +119,7 @@ function syncViewToggle(){
   const ro=$('returnsOpts'); if(ro) ro.hidden=!(vt==='returns' && !on);
   const yo=$('yearOpts'); if(yo) yo.hidden=!(vt==='calyear' && !on);
   const oo=$('otdOpts'); if(oo) oo.hidden=!(vt==='onthisday' && !on);
+  const rbo=$('rangeOpts'); if(rbo) rbo.hidden=!(vt==='ranges' && !on);
   const showPct=!on && (vt==='powerlaw' || (vt==='pricema' && !($('pmm')&&$('pmm').value==='osc')) || (!vt && typeof ratioKind==='function' && ratioKind()));
   document.body.classList.toggle('has-pct-bands', showPct);
   const pbo=$('pctBandOpts'); if(pbo) pbo.hidden=!showPct;
@@ -371,7 +373,7 @@ function drawPowerLawUplot(u,xs,barAt){
 }
 
 let plSeries={};
-function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if(typeof clearScoutPlots==='function')clearScoutPlots();if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view','scout-view','scout-powerlaw','scout-drawdown','scout-ath','scout-sats','scout-pricema','scout-osc','scout-returns','mode-mult','scout-blend','scout-epoch','scout-calyear','scout-onthisday','has-otd-table','scout-hcycles');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null;if($('plLegend')&&!($('pl')&&$('pl').checked)){$('plLegend').hidden=true;$('plLegend').textContent=''}}
+function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if(typeof clearScoutPlots==='function')clearScoutPlots();if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view','scout-view','scout-powerlaw','scout-drawdown','scout-ath','scout-sats','scout-pricema','scout-osc','scout-returns','mode-mult','scout-blend','scout-epoch','scout-calyear','scout-onthisday','has-otd-table','scout-hcycles','scout-ranges');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null;if($('plLegend')&&!($('pl')&&$('pl').checked)){$('plLegend').hidden=true;$('plLegend').textContent=''}}
 
 async function draw(pushUrl){
   const hash=buildHash();
@@ -764,7 +766,7 @@ function clear_table(){
   if($('loadRaw')) $('loadRaw').textContent='Show data';
 }
 function showTable(){
-  if($('cy').checked) fillCycleTable(); else if(typeof scoutView==='function'&&scoutView()==='powerlaw') fillPowerLawTable(); else if(scoutView()==='drawdown') fillDrawdownTable(); else if(scoutView()==='ath') fillAthTable(); else if(scoutView()==='sats') fillSatsTable(); else if(scoutView()==='pricema') fillPriceMaTable(); else if(scoutView()==='returns') fillReturnsTable(); else if(scoutView()==='epoch') fillEpochTable(); else if(scoutView()==='calyear') fillCalYearTable(); else if(scoutView()==='onthisday') fillOnThisDayTable(); else if(scoutView()==='hcycles') fillHcyclesTable(); else fillPriceTable();
+  if($('cy').checked) fillCycleTable(); else if(typeof scoutView==='function'&&scoutView()==='powerlaw') fillPowerLawTable(); else if(scoutView()==='drawdown') fillDrawdownTable(); else if(scoutView()==='ath') fillAthTable(); else if(scoutView()==='sats') fillSatsTable(); else if(scoutView()==='pricema') fillPriceMaTable(); else if(scoutView()==='returns') fillReturnsTable(); else if(scoutView()==='epoch') fillEpochTable(); else if(scoutView()==='calyear') fillCalYearTable(); else if(scoutView()==='onthisday') fillOnThisDayTable(); else if(scoutView()==='hcycles') fillHcyclesTable(); else if(scoutView()==='ranges') fillRangesTable(); else fillPriceTable();
   tableOpen=true;
   $('tableWrap').hidden=false;
   $('downloadCsv').hidden=false;
@@ -813,6 +815,18 @@ function fillCycleTable(){
     }
   }
   $('chart_table').tBodies[0].innerHTML=parts.join('');
+}
+function fillRangesTable(){
+  const s=window.lastScout||{}, bands=s.bands||[], counts=s.counts||[];
+  const head=['Band low','Band high','Days'];
+  setTableHead(head); tableCsv=[head.slice()];
+  const rows=[];
+  bands.forEach((b,i)=>{
+    const rec=[String(b.lo), b.open?'∞':String(b.hi), String(counts[i]||0)];
+    tableCsv.push(rec);
+    rows.push('<tr>'+rec.map(v=>'<td>'+v+'</td>').join('')+'</tr>');
+  });
+  $('chart_table').tBodies[0].innerHTML=rows.join('');
 }
 function fillHcyclesTable(){
   const s=window.lastScout||{}, cycles=s.cycles||[];
@@ -990,9 +1004,13 @@ function isMobileUa(){
 }
 function chartTitleLine(){
   const vt=($('vt')&&$('vt').value)||'';
-  if(vt==='powerlaw'||vt==='drawdown'||vt==='ath'||vt==='sats'||vt==='pricema'||vt==='returns'||vt==='epoch'||vt==='calyear'||vt==='onthisday'||vt==='hcycles'){
+  if(vt==='powerlaw'||vt==='drawdown'||vt==='ath'||vt==='sats'||vt==='pricema'||vt==='returns'||vt==='epoch'||vt==='calyear'||vt==='onthisday'||vt==='hcycles'||vt==='ranges'){
     const m=currentMarket();
     const name=m==='combinedUSD'?'BTC/USD Combined':('BTC/USD '+marketLabel(m).replace(/ \(USD\)/,''));
+    if(vt==='ranges'){
+      const pow=($('rb')&&$('rb').value)==='pow2';
+      return name+' · Days in price ranges'+(pow?' (powers of 2)':'');
+    }
     if(vt==='hcycles'){
       return name+' · Halving cycles (USD)';
     }
@@ -1305,6 +1323,15 @@ function shareCaption(){
     if(bars.length) bits.push('Last $'+Number(bars.at(-1).close).toLocaleString('en-US',{maximumFractionDigits:0})+' on '+isoUTC(bars.at(-1).time));
     return bits.join('. ')+'.';
   }
+  if(vt==='ranges'){
+    const s=window.lastScout||{};
+    bits.push('Days Bitcoin has spent in each price range ('+(s.mode==='pow2'?'powers of 2':'orders of magnitude')+')');
+    const bands=s.bands||[], counts=s.counts||[];
+    const parts=[];
+    bands.forEach((b,i)=>{ if(counts[i]) parts.push((counts[i])+' days in '+formatBandEdge(b.lo)+(b.open?'+':'–'+formatBandEdge(b.hi))); });
+    if(parts.length) bits.push(parts.join(', '));
+    return bits.join('. ')+'.';
+  }
   if(vt==='hcycles'){
     const s=window.lastScout||{};
     const cur=(s.cycles||[]).find(c=>c.current)||(s.cycles||[]).at(-1);
@@ -1463,7 +1490,7 @@ document.querySelectorAll('#viewToggle button').forEach(b=>b.onclick=()=>{const 
   if($('cy').checked===want && !want){draw(1);return}
   $('cy').checked=want;if(want)$('p').checked=false;draw(1)});
 $('vt')&&$('vt').addEventListener('change',()=>{if($('vt').value)$('cy').checked=false;draw(1)});
-['pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','ym','ott'].forEach(id=>$(id)&&$(id).addEventListener('change',()=>draw(1)));
+['pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','ym','ott','rb'].forEach(id=>$(id)&&$(id).addEventListener('change',()=>draw(1)));
 ['otdMonth','otdDay'].forEach(id=>$(id)&&$(id).addEventListener('change',()=>{
   if(typeof writeOnThisDay==='function') writeOnThisDay({m:parseInt($('otdMonth').value,10),d:parseInt($('otdDay').value,10)});
   draw(1);
