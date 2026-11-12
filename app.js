@@ -1,6 +1,6 @@
 const $=id=>document.getElementById(id);
 const LW=LightweightCharts;
-const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p'];
+const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','cy','ca'];
 // populate indicator selects (only implemented ones, original naming)
 document.querySelectorAll('select.ind').forEach(s=>{s.innerHTML='<option value="">None</option>'+Object.entries(INDICATORS).map(([k,v])=>`<option value="${k}">${v.label.replace(/ \(.*/,'')}</option>`).join('')});
 
@@ -9,12 +9,18 @@ function buildHash(){const h=[];for(const id of FIELDS){const e=$(id);
   if(e.type==='checkbox'){if(e.checked)h.push(id)}else if(e.value)h.push(id+'g'+escape(e.value))}return h.join('z')}
 function parseHash(hash){ if(!hash)return;
   // reset everything to blank/unchecked; hash fully describes state (original reset v,t,r)
-  for(const id of FIELDS){const e=$(id);if(id==='m'){e.value='combinedUSD';continue}if(e.type==='checkbox')e.checked=false;else e.value=({m1:'10',m2:'25'})[id]||''}
+  for(const id of FIELDS){const e=$(id);if(id==='m'){e.value='combinedUSD';continue}if(e.type==='checkbox')e.checked=false;else e.value=({m1:'10',m2:'25',ca:'low'})[id]||''}
   // Longest-id match so values may contain "g" (e.g. mgmtgoxUSD). The original split("g") would turn that into mtogxUSD.
   const ids=FIELDS.slice().sort((a,b)=>b.length-a.length);
   for(const part of hash.split('z')){const id=ids.find(x=>part===x||part.startsWith(x+'g'));if(!id)continue;const e=$(id);
     if(e.type==='checkbox')e.checked=true;else e.value=unescape(part.slice(id.length+1))}}
 function syncCustom(){ $('CustomTimeBox').style.display=$('c').checked?'block':'none'; $('r').style.display=$('c').checked?'none':'';}
+function syncViewToggle(){
+  const on=$('cy').checked;
+  document.body.classList.toggle('cycles-view',on);
+  document.querySelectorAll('#viewToggle button').forEach(b=>b.classList.toggle('on',(b.dataset.cy==='1')===on));
+  $('main').classList.toggle('cycles',on);
+}
 function fmtD(d){return d.toISOString().slice(0,10)}
 function setCustomDefaults(){const d=parseInt($('r').value)||29;const now=new Date();
   if(!$('s').value)$('s').value=fmtD(new Date(now-(d-1)*864e5));if(!$('e').value)$('e').value=fmtD(new Date(+now+864e5));}
@@ -31,6 +37,8 @@ async function draw(pushUrl){
   const hash=buildHash();
   const url=location.href.replace(/#.*$/,'')+'#'+hash;$('permalink').value=url;
   if(pushUrl===1)history.pushState(hash,'','#'+hash);else if(pushUrl===2)history.replaceState(hash,'','#'+hash);
+  syncViewToggle();syncScaleToggle();
+  if($('cy').checked){await drawCycles();return}
   // time window
   const now=Math.floor(Date.now()/1000);let start,end=now,days;
   if($('c').checked){start=Date.parse($('s').value)/1000;end=Math.min(now,Date.parse($('e').value)/1000||now);days=(end-start)/86400}
@@ -46,6 +54,53 @@ async function draw(pushUrl){
   const note=$('sourceNote');
   if(note) note.textContent=(m==='combinedUSD'?SPLICE+' ':'')+'Daily history cached locally. Fine intervals for Coinbase/Bitstamp are fetched live.';
   render(interval);clear_table();
+}
+let cycleSeries=[];
+async function drawCycles(){
+  status('Loading Combined daily history…');
+  let all;
+  try{all=await getDaily('combinedUSD')}catch(e){status('Error: '+e.message);return}
+  all=all.map(toBar);
+  if(!all.length){status('No data returned.');return}
+  const cycles=detectCycles(all);
+  const align=$('ca').value||'low';
+  cycleSeries=buildCycleSeries(all,cycles,align,CYCLE_PRICE_MODE);
+  status(`${cycleSeries.length} cycles · Combined daily · align by ${align} · raw USD`);
+  if($('sourceNote')) $('sourceNote').textContent='Cycles use Combined history (daily). '+SPLICE;
+  $('cycleTable').innerHTML=cycleTableHtml(cycles);
+  $('cycleLegend').innerHTML=cycleLegendHtml(cycleSeries);
+  renderCycles(align);
+  clear_table();
+}
+function renderCycles(align){
+  clearCharts();syncScaleToggle();
+  const isLog=$('l').checked;
+  const fmt=isLog?compact:v=>v<0?'':v.toLocaleString('en-US',{maximumFractionDigits:v>=100?0:2});
+  const main=mkChart($('main'),{localization:{priceFormatter:fmt,timeFormatter:t=>'Day '+cycleAxisLabel(t)},
+    timeScale:{borderColor:'#ccc',timeVisible:true,secondsVisible:false,minBarSpacing:0.05,rightOffset:4,
+      tickMarkFormatter:(t)=>cycleAxisLabel(t)}});
+  charts.push(main);
+  main.priceScale('right').applyOptions({mode:isLog?LW.PriceScaleMode.Logarithmic:LW.PriceScaleMode.Normal,scaleMargins:{top:.08,bottom:.06}});
+  const refs=[];
+  for(const line of cycleSeries){
+    const s=main.addLineSeries({color:line.color,lineWidth:line.open?3:2,priceLineVisible:false,lastValueVisible:true,
+      title:String(line.cycle?line.cycle.year:line.anchorLabel||''),crosshairMarkerRadius:4});
+    s.setData(line.pts.filter(p=>p.value!=null&&p.value>0).map(p=>({time:p.time,value:p.value})));
+    const marks=cycleMarkers(line,align);
+    if(marks.length) s.setMarkers(marks);
+    refs.push({s,line});
+  }
+  main.timeScale().fitContent();setTimeout(()=>main.timeScale().fitContent(),50);
+  main.subscribeCrosshairMove(p=>{
+    if(!p||p.time==null){$('legend').textContent='';return}
+    const day=timeToDay(p.time);
+    const bits=['Day '+day];
+    for(const {s,line} of refs){
+      const v=p.seriesData&&p.seriesData.get(s);
+      if(v&&v.value!=null) bits.push(`${line.cycle?line.cycle.year:line.label.split(' ')[0]} $${usd(v.value)}`);
+    }
+    $('legend').textContent=bits.join('  ·  ');
+  });
 }
 // compact price labels for log scale: 1k, 10k, 100k, 2.5k ...
 function compact(v){const a=Math.abs(v);if(a>=1e6)return +(v/1e6).toPrecision(3)+'M';if(a>=1e3)return +(v/1e3).toPrecision(3)+'k';return +v.toPrecision(3)+''}
@@ -102,14 +157,17 @@ $('loadRaw').onclick=e=>{e.preventDefault();const tb=$('chart_table').tBodies[0]
 // ---- events ----
 document.querySelectorAll('#scaleToggle button').forEach(b=>b.onclick=()=>{const want=b.dataset.l==='1';
   if($('l').checked===want&&!$('p').checked)return;$('l').checked=want;$('p').checked=false;draw(1)});
+document.querySelectorAll('#viewToggle button').forEach(b=>b.onclick=()=>{const want=b.dataset.cy==='1';
+  if($('cy').checked===want)return;$('cy').checked=want;if(want)$('p').checked=false;draw(1)});
 $('chartoptions').addEventListener('change',e=>{if(e.target.id==='c'){if($('c').checked)setCustomDefaults();else{$('s').value=$('e').value=''}syncCustom()}
   if(e.target.id==='r')$('c').checked=false,syncCustom();draw(1)});
+$('ca').addEventListener('change',()=>draw(1));
 $('SubmitButton').onclick=()=>draw(1);
 const shift=d=>{if(!$('c').checked){$('c').checked=true;setCustomDefaults();syncCustom()}
   for(const id of['s','e'])$(id).value=fmtD(new Date(Date.parse($(id).value)+d*864e5));draw(1)};
 $('Prev').onclick=()=>shift(-1);$('Next').onclick=()=>shift(1);
 $('getPermalink').onclick=e=>{e.preventDefault();$('permalinkbox').hidden=!$('permalinkbox').hidden;$('permalink').select()};
 $('larger').onclick=e=>{e.preventDefault();document.body.classList.toggle('wide')};
-window.onpopstate=()=>{parseHash(location.hash.slice(1));syncCustom();draw(0)};
+window.onpopstate=()=>{parseHash(location.hash.slice(1));syncCustom();syncViewToggle();draw(0)};
 // init: original defaults = 60 days, candlestick, MA 10/25 lengths, volume on
-parseHash(location.hash.slice(1));syncCustom();draw(2);
+parseHash(location.hash.slice(1));syncCustom();syncViewToggle();draw(2);

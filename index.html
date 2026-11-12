@@ -17,7 +17,7 @@
     </optgroup>
   </select>
   <input id="SubmitButton" type="submit" value="Draw"></div>
- <div class="col"><h6>Time Period</h6>
+ <div class="col price-only"><h6>Time Period</h6>
   <select id="r">
    <option value="1">1 day</option><option value="2">2 days</option><option value="5">5 days</option><option value="10">10 days</option>
    <option value="30">1 month</option><option value="60" selected>2 months</option><option value="90">3 months</option><option value="120">4 months</option>
@@ -28,37 +28,53 @@
   <label><input type="checkbox" id="c">Custom Time</label>
   <div id="CustomTimeBox"><input id="s" type="date"> — <input id="e" type="date"><br>
    <button type="button" id="Prev">&lt;</button> day <button type="button" id="Next">&gt;</button></div></div>
- <div class="col"><h6>Chart Type</h6>
+ <div class="col price-only"><h6>Chart Type</h6>
   <select id="t"><option value="">None</option><option value="S" selected>CandleStick</option><option value="C">Closing Price</option>
    <option value="M">Median Price</option><option value="O">OHLC</option><option value="T">Typical Price</option><option value="W">Weighted Close</option></select>
   <h6>Price Band</h6>
   <select id="b"><option value="">None</option><option value="B">Bollinger Band</option><option value="D">Donchian Channel</option><option value="E">Envelop (SMA 20 +/- 10%)</option></select></div>
- <div class="col"><h6>Moving Averages</h6>
+ <div class="col price-only"><h6>Moving Averages</h6>
   <select id="a1"><option value="">None</option><option value="SMA">Simple</option><option value="EMA">Exponential</option><option value="TMA">Triangular</option><option value="WMA">Weighted</option></select>
   <input id="m1" size="3" value="10"><br>
   <select id="a2"><option value="">None</option><option value="SMA">Simple</option><option value="EMA">Exponential</option><option value="TMA">Triangular</option><option value="WMA">Weighted</option></select>
   <input id="m2" size="3" value="25"></div>
- <div class="col"><h6>Technical Indicators</h6>
+ <div class="col price-only"><h6>Technical Indicators</h6>
   <label><input type="checkbox" id="x">large indicators</label><br>
   <select id="i1" class="ind"></select><br><select id="i2" class="ind"></select><br>
   <select id="i3" class="ind"></select><br><select id="i4" class="ind"></select></div>
- <div class="col"><h6>Options</h6>
+ <div class="col price-only"><h6>Options</h6>
   <label><input type="checkbox" id="v" checked>Show Volume Bars</label><br>
   <label><input type="checkbox" id="cv">Volume in Currency</label><br>
   <label><input type="checkbox" id="l">Log Scale</label><br>
   <label><input type="checkbox" id="p">Percentage Scale</label></div>
 </form>
 <div id="content_chart" class="wrap">
- <p class="info"><span id="scaleToggle" class="seg" role="group" aria-label="Price scale"><button type="button" data-l="0">Linear</button><button type="button" data-l="1">Log</button></span> <a href="#" id="getPermalink">Link to this chart</a> · <a href="#" id="larger">Larger chart</a>
-  <span id="legend"></span></p>
+ <p class="info">
+  <span id="scaleToggle" class="seg" role="group" aria-label="Price scale"><button type="button" data-l="0">Linear</button><button type="button" data-l="1">Log</button></span>
+  <span id="viewToggle" class="seg" role="group" aria-label="View"><button type="button" data-cy="0">Price</button><button type="button" data-cy="1">Cycles</button></span>
+  <label id="cycleAlignBox" class="cycle-only">Align
+    <select id="ca">
+      <option value="low" selected>By cycle low</option>
+      <option value="high">By cycle high</option>
+      <option value="halving">By halving date</option>
+      <option value="calendar">4-year calendar (Jan 1)</option>
+    </select>
+  </label>
+  <input type="checkbox" id="cy" hidden>
+  <a href="#" id="getPermalink">Link to this chart</a> · <a href="#" id="larger">Larger chart</a>
+  <span id="legend"></span>
+ </p>
+ <div id="cycleLegend" class="cycle-only"></div>
  <div id="permalinkbox" hidden>Use this link to bookmark or share this chart. Select "Custom Time" for a permanent link to a specific date.<br><input id="permalink" readonly></div>
  <div id="charts"><div id="main"></div><div id="subs"></div></div>
+ <div id="cycleTable" class="cycle-only"></div>
  <p class="small" id="sourceNote">Daily history cached locally.</p>
- <a href="#" id="loadRaw">Load raw data</a>
+ <a href="#" id="loadRaw" class="price-only">Load raw data</a>
  <table class="data" id="chart_table" hidden><thead><tr><th>Timestamp</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Volume (BTC)</th><th>Volume (Currency)</th><th>Weighted Price</th></tr></thead><tbody></tbody></table>
 </div>
 <script src="vendor/lightweight-charts.js"></script>
 <script src="indicators.js"></script>
+<script src="cycles.js"></script>
 <script src="data.js"></script>
 <script src="app.js"></script>
 </body></html>

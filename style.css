@@ -20,3 +20,29 @@ body.wide #content_chart{max-width:none}
 .seg{display:inline-flex;border:1px solid #f7931a;border-radius:4px;overflow:hidden;margin-right:10px;vertical-align:middle}
 .seg button{border:0;background:#fff;color:#b86a00;font:bold 12px Verdana,sans-serif;padding:4px 14px;cursor:pointer}
 .seg button.on{background:#f7931a;color:#fff}
+
+#chartoptions{flex-wrap:wrap}
+.col{flex:1 1 150px;min-width:140px}
+#header .wrap{flex-wrap:wrap;gap:10px 30px}
+.info{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px}
+#legend{float:none;margin-left:auto}
+#cycleAlignBox{font-weight:bold;color:#333}
+#cycleAlignBox select{font-size:12px;max-width:200px;margin-left:4px}
+.cycle-only{display:none}
+body.cycles-view .cycle-only{display:block}
+body.cycles-view label.cycle-only,body.cycles-view #cycleAlignBox{display:inline-flex;align-items:center}
+body.cycles-view .price-only{display:none}
+#cycleLegend{display:none;flex-wrap:wrap;gap:8px 16px;margin:0 0 8px;font-size:12px}
+body.cycles-view #cycleLegend{display:flex}
+.leg-item,.swatch{display:inline-flex;align-items:center;gap:6px}
+.swatch{width:12px;height:12px;border-radius:2px;display:inline-block;flex:none;vertical-align:middle;margin-right:4px}
+table.cycles{width:100%;margin-top:10px;font-size:11px}
+table.cycles td,table.cycles th{text-align:left}
+table.cycles em{color:#888;font-style:italic;font-size:10px}
+#main.cycles{height:520px}
+@media (max-width:640px){
+  #main, #main.cycles{height:360px}
+  .col{flex:1 1 46%}
+  #logo{font-size:18px}
+  .seg button{padding:4px 10px}
+}
