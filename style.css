@@ -10,7 +10,7 @@ body{margin:0;font:12px/1.4 Verdana,Arial,sans-serif;color:#222;background:#fff}
 select,input{font-size:11px}select{max-width:130px}
 #CustomTimeBox{display:none}#CustomTimeBox input{width:110px}
 .info{margin:6px 0}#legend{float:right;color:#555}
-#permalink{width:100%}#charts{border:1px solid #ccc}
+#permalink{width:100%}#charts{border:1px solid #ccc;position:relative}
 #main{height:480px}.sub{height:130px;border-top:1px solid #ccc;position:relative}.sub.big{height:220px}
 .sub .lbl{position:absolute;left:6px;top:2px;z-index:5;font-size:11px;color:#555;background:#fffc}
 .small{color:#777;font-size:10px}
@@ -46,3 +46,12 @@ table.cycles em{color:#888;font-style:italic;font-size:10px}
   #logo{font-size:18px}
   .seg button{padding:4px 10px}
 }
+
+
+#chartStage{position:relative}
+#chartWatermark{
+  position:absolute;left:12px;bottom:28px;z-index:6;pointer-events:none;user-select:none;
+  color:rgba(40,40,40,0.38);font:12px/1.2 Verdana,Arial,sans-serif;letter-spacing:.02em;
+  text-shadow:0 0 3px #fff,0 0 6px #fff,0 1px 0 #fff;
+}
+#main.cycles + #chartWatermark, body.cycles-view #chartWatermark{bottom:32px}
