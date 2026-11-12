@@ -26,11 +26,11 @@ body.wide #content_chart{max-width:none}
 #header .wrap{flex-wrap:wrap;gap:10px 30px}
 .info{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px}
 #legend{float:none;margin-left:auto}
-#cycleAlignBox{font-weight:bold;color:#333}
-#cycleAlignBox select{font-size:12px;max-width:200px;margin-left:4px}
+#cycleAlignBox,#cyclePriceBox{font-weight:bold;color:#333}
+#cycleAlignBox select,#cyclePriceBox select{font-size:12px;max-width:220px;margin-left:4px}
 .cycle-only{display:none}
 body.cycles-view .cycle-only{display:block}
-body.cycles-view label.cycle-only,body.cycles-view #cycleAlignBox{display:inline-flex;align-items:center}
+body.cycles-view label.cycle-only,body.cycles-view #cycleAlignBox,body.cycles-view #cyclePriceBox{display:inline-flex;align-items:center}
 body.cycles-view .price-only{display:none}
 #cycleLegend{display:none;flex-wrap:wrap;gap:8px 16px;margin:0 0 8px;font-size:12px}
 body.cycles-view #cycleLegend{display:flex}

@@ -60,6 +60,14 @@
       <option value="calendar">4-year calendar (Jan 1)</option>
     </select>
   </label>
+  <label id="cyclePriceBox" class="cycle-only">Prices
+    <select id="cp">
+      <option value="usd" selected>Stacked (USD)</option>
+      <option value="low">Scaled: multiple of cycle low</option>
+      <option value="high">Scaled: % of cycle high</option>
+      <option value="day0">Scaled: relative to day 0</option>
+    </select>
+  </label>
   <input type="checkbox" id="cy" hidden>
   <a href="#" id="getPermalink">Link to this chart</a> · <a href="#" id="larger">Larger chart</a>
   <span id="legend"></span>

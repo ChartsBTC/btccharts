@@ -1,6 +1,6 @@
 const $=id=>document.getElementById(id);
 const LW=LightweightCharts;
-const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','cy','ca'];
+const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','cy','ca','cp'];
 // populate indicator selects (only implemented ones, original naming)
 document.querySelectorAll('select.ind').forEach(s=>{s.innerHTML='<option value="">None</option>'+Object.entries(INDICATORS).map(([k,v])=>`<option value="${k}">${v.label.replace(/ \(.*/,'')}</option>`).join('')});
 
@@ -9,7 +9,7 @@ function buildHash(){const h=[];for(const id of FIELDS){const e=$(id);
   if(e.type==='checkbox'){if(e.checked)h.push(id)}else if(e.value)h.push(id+'g'+escape(e.value))}return h.join('z')}
 function parseHash(hash){ if(!hash)return;
   // reset everything to blank/unchecked; hash fully describes state (original reset v,t,r)
-  for(const id of FIELDS){const e=$(id);if(id==='m'){e.value='combinedUSD';continue}if(e.type==='checkbox')e.checked=false;else e.value=({m1:'10',m2:'25',ca:'low'})[id]||''}
+  for(const id of FIELDS){const e=$(id);if(id==='m'){e.value='combinedUSD';continue}if(e.type==='checkbox')e.checked=false;else e.value=({m1:'10',m2:'25',ca:'low',cp:'usd'})[id]||''}
   // Longest-id match so values may contain "g" (e.g. mgmtgoxUSD). The original split("g") would turn that into mtogxUSD.
   const ids=FIELDS.slice().sort((a,b)=>b.length-a.length);
   for(const part of hash.split('z')){const id=ids.find(x=>part===x||part.startsWith(x+'g'));if(!id)continue;const e=$(id);
@@ -64,18 +64,24 @@ async function drawCycles(){
   if(!all.length){status('No data returned.');return}
   const cycles=detectCycles(all);
   const align=$('ca').value||'low';
-  cycleSeries=buildCycleSeries(all,cycles,align,CYCLE_PRICE_MODE);
-  status(`${cycleSeries.length} cycles · Combined daily · align by ${align} · raw USD`);
+  const mode=$('cp').value||CYCLE_PRICE_MODE;
+  cycleSeries=buildCycleSeries(all,cycles,align,mode);
+  status(`${cycleSeries.length} cycles · Combined daily · align by ${align} · ${cycleModeLabel(mode)}`);
   if($('sourceNote')) $('sourceNote').textContent='Cycles use Combined history (daily). '+SPLICE;
   $('cycleTable').innerHTML=cycleTableHtml(cycles);
   $('cycleLegend').innerHTML=cycleLegendHtml(cycleSeries);
-  renderCycles(align);
+  renderCycles(align,mode);
   clear_table();
 }
-function renderCycles(align){
+function renderCycles(align, mode){
   clearCharts();syncScaleToggle();
+  mode=mode||$('cp').value||'usd';
   const isLog=$('l').checked;
-  const fmt=isLog?compact:v=>v<0?'':v.toLocaleString('en-US',{maximumFractionDigits:v>=100?0:2});
+  const fmt=v=>{
+    if(v==null||!isFinite(v)||v<=0)return '';
+    if(mode==='usd') return isLog?compact(v):v.toLocaleString('en-US',{maximumFractionDigits:v>=100?0:2});
+    return cyclePriceFormat(v, mode);
+  };
   const main=mkChart($('main'),{localization:{priceFormatter:fmt,timeFormatter:t=>'Day '+cycleAxisLabel(t)},
     timeScale:{borderColor:'#ccc',timeVisible:true,secondsVisible:false,minBarSpacing:0.05,rightOffset:4,
       tickMarkFormatter:(t)=>cycleAxisLabel(t)}});
@@ -97,7 +103,14 @@ function renderCycles(align){
     const bits=['Day '+day];
     for(const {s,line} of refs){
       const v=p.seriesData&&p.seriesData.get(s);
-      if(v&&v.value!=null) bits.push(`${line.cycle?line.cycle.year:line.label.split(' ')[0]} $${usd(v.value)}`);
+      if(!v||v.value==null) continue;
+      const pt=line.pts.find(x=>x.time===p.time);
+      const bar=pt&&pt.bar;
+      const name=line.cycle?line.cycle.year:line.label.split(' ')[0];
+      const date=bar?isoUTC(bar.time):'';
+      const usdPx=bar?(' $'+usd(bar.close)):'';
+      const scaled=(mode!=='usd')?(' '+cyclePriceFormat(v.value,mode)):'';
+      bits.push(`${name}${date?' '+date:''}${usdPx}${scaled}`);
     }
     $('legend').textContent=bits.join('  ·  ');
   });
@@ -162,6 +175,7 @@ document.querySelectorAll('#viewToggle button').forEach(b=>b.onclick=()=>{const 
 $('chartoptions').addEventListener('change',e=>{if(e.target.id==='c'){if($('c').checked)setCustomDefaults();else{$('s').value=$('e').value=''}syncCustom()}
   if(e.target.id==='r')$('c').checked=false,syncCustom();draw(1)});
 $('ca').addEventListener('change',()=>draw(1));
+$('cp').addEventListener('change',()=>draw(1));
 $('SubmitButton').onclick=()=>draw(1);
 const shift=d=>{if(!$('c').checked){$('c').checked=true;setCustomDefaults();syncCustom()}
   for(const id of['s','e'])$(id).value=fmtD(new Date(Date.parse($(id).value)+d*864e5));draw(1)};
