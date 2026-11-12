@@ -93,6 +93,7 @@
       <option value="ath">ATHs and days between</option>
       <option value="sats">Sats per dollar</option>
       <option value="pricema">Price / MA</option>
+      <option value="returns">Rolling returns</option>
     </select>
   </label>
   <span id="priceMaOpts" class="scout-opts" hidden>
@@ -105,6 +106,20 @@
       <option value="panel" selected>Price + ratio</option>
       <option value="osc">Percentile oscillator</option>
     </select></label>
+  </span>
+  <span id="returnsOpts" class="scout-opts" hidden>
+    <label>Metric <select id="rm">
+      <option value="cagr" selected>N-year CAGR</option>
+      <option value="roi">N-year ROI</option>
+      <option value="mult">1-year multiple</option>
+    </select></label>
+    <label id="rnBox">N <select id="rn">
+      <option value="1">1 year</option>
+      <option value="2">2 years</option>
+      <option value="4" selected>4 years</option>
+      <option value="8">8 years</option>
+    </select></label>
+    <label><input type="checkbox" id="rcl" checked>Cycle labels</label>
   </span>
   <span id="markerBox" class="price-only">
     <label><input type="checkbox" id="ch">Cycle highs</label>

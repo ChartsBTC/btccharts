@@ -17,3 +17,4 @@ Static bitcoincharts.com-style chart page.
 - View selector (`vt`): dedicated scout charts start with Power Law, which plots log price vs days since genesis with the fitted line, a dashed projection to ~2030, the equation and R² on the chart, plus Price/Power Law (via the generic ratio helper) and Years Ahead panels.
 - More views in the View selector: Drawdown from ATH (`vtgdrawdown`), ATHs and days between (`vtgath`), and Sats per dollar (`vtgsats`).
 - Price / MA view (`vtgpricema`): epoch-colored log price with a 200-day, 100-week, or 200-week SMA and a Price/MA ratio panel (Mayer Multiple for the 200-day). A percentile oscillator mode colors the ratio by 20/40/60/80th bands. Hash: `pma`, `pmm`.
+- Rolling N-year returns (`vtgreturns`): trailing CAGR or ROI (N = 1, 2, 4, or 8 years) and a 1-year price multiple (green above 1, red below). ROI has gridlines at powers of 4. Optional cycle high/low labels and a Lowest marker. Hash: `rm`, `rn`, `rcl`.

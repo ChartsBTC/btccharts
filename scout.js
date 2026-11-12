@@ -595,6 +595,7 @@ async function renderScout(kind){
   if(kind==='ath'){renderAthView();return true}
   if(kind==='sats'){renderSatsView();return true}
   if(kind==='pricema'){await renderPriceMaView();return true}
+  if(kind==='returns'){await renderReturnsView();return true}
   return false;
 }
 
@@ -874,10 +875,11 @@ function bandForRatio(v, pctVals){
 
 async function renderPriceMaView(){
   clearCharts();
-  document.body.classList.add('scout-view','scout-pricema');
-  $('charts').classList.remove('has-volume');
   const kind=($('pma')&&$('pma').value)||'200d';
   const mode=($('pmm')&&$('pmm').value)||'panel';
+  document.body.classList.add('scout-view','scout-pricema');
+  document.body.classList.toggle('scout-osc',mode==='osc');
+  $('charts').classList.remove('has-volume');
   const daily=await scoutDailyBars();
   const shown=sliceDisplay(daily);
   const ratio=computeRatio(shown, kind) || computeRatio(daily, kind);
@@ -961,5 +963,120 @@ async function renderPriceMaView(){
     return isoUTC(t)+'  ·  $'+usd(b.close)+(p?'  ·  '+spec.name+' $'+usd(p.overlay)+'  ·  '+computed.title+' '+formatRatioValue(p.value):'');
   });
   syncScoutLw();
+}
+
+
+
+function rollingLookback(daily, years, mode){
+  const pts=[];
+  let j=0;
+  const need=years*365.25*86400;
+  for(let i=0;i<daily.length;i++){
+    const t=daily[i].time, c=daily[i].close;
+    if(!(c>0)) continue;
+    const target=t-need;
+    while(j+1<i && daily[j+1].time<=target) j++;
+    const prevB=daily[j];
+    if(!prevB||prevB.time>target||!(prevB.close>0)) continue;
+    const days=(t-prevB.time)/86400;
+    if(days<years*365.25*0.92) continue;
+    let value;
+    if(mode==='cagr') value=(Math.pow(c/prevB.close,365.25/days)-1)*100;
+    else if(mode==='roi') value=(c/prevB.close-1)*100;
+    else value=c/prevB.close;
+    if(!isFinite(value)) continue;
+    pts.push({time:t,value,close:c,prev:prevB.close,days});
+  }
+  return pts;
+}
+function fmtCagr(v){
+  if(v==null||!isFinite(v)) return '';
+  const abs=Math.abs(v);
+  return (v<0?'-':'')+(abs>=10?abs.toFixed(0):abs.toFixed(1))+'%';
+}
+function fmtRoi(v){
+  if(v==null||!isFinite(v)) return '';
+  if(v>=1000) return Math.round(v).toLocaleString('en-US')+'%';
+  return fmtCagr(v);
+}
+
+async function renderReturnsView(){
+  clearCharts();
+  const mode=($('rm')&&$('rm').value)||'cagr';
+  document.body.classList.add('scout-view','scout-returns');
+  document.body.classList.toggle('mode-mult',mode==='mult');
+  $('charts').classList.remove('has-volume');
+  const years=mode==='mult'?1:(parseInt($('rn')&&$('rn').value)||4);
+  const labelsOn=!($('rcl')&&$('rcl').checked===false);
+  const daily=await scoutDailyBars();
+  const shown=sliceDisplay(daily);
+  const pts=rollingLookback(daily, years, mode).filter(p=>!shown.length||p.time>=shown[0].time);
+  if(pts.length<2){status('Not enough history for a '+years+'-year window.');return}
+  window.lastScout={kind:'returns',mode,years,points:pts};
+  const main=$('main');
+  main.innerHTML='';
+  $('subs').innerHTML='';
+  const isLog=pts.every(p=>p.value>0);
+  const fmt=mode==='mult'?v=>formatRatioValue(v):(mode==='roi'?fmtRoi:fmtCagr);
+  const ch=mkChart(main,{localization:{priceFormatter:fmt}});
+  charts.push(ch);
+  ch.priceScale('right').applyOptions({
+    mode:isLog?LW.PriceScaleMode.Logarithmic:LW.PriceScaleMode.Normal,
+    scaleMargins:{top:.1,bottom:.08},minimumWidth:80,
+  });
+
+  if(mode==='mult'){
+    const up=pts.filter(p=>p.value>=1).map(p=>({time:p.time,value:p.value}));
+    const dn=pts.filter(p=>p.value<1).map(p=>({time:p.time,value:p.value}));
+    if(up.length) ch.addLineSeries({color:'#2e7d32',lineVisible:false,lineWidth:0,pointMarkersVisible:true,pointMarkersRadius:3,priceLineVisible:false,lastValueVisible:false}).setData(up);
+    if(dn.length) ch.addLineSeries({color:'#e53935',lineVisible:false,lineWidth:0,pointMarkersVisible:true,pointMarkersRadius:3,priceLineVisible:false,lastValueVisible:true,title:'Multiple'}).setData(dn.length?dn:up);
+    const one=ch.addLineSeries({color:'#999',lineWidth:0,lineVisible:false,priceLineVisible:false,lastValueVisible:false});
+    one.setData([{time:pts[0].time,value:1},{time:pts.at(-1).time,value:1}]);
+    one.createPriceLine({price:1,color:'#888',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'1.0'});
+  }else{
+    const color=mode==='roi'?'#f9a825':'#7b1fa2';
+    const s=ch.addLineSeries({color,lineWidth:2,priceLineVisible:false,lastValueVisible:true,title:mode==='roi'?'ROI':'CAGR'});
+    s.setData(pts.map(p=>({time:p.time,value:p.value})));
+    if(mode==='roi'&&isLog){
+      for(let n=3;n<=6;n++){
+        const g=Math.pow(4,n); // 64, 256, ...
+        const min=Math.min(...pts.map(p=>p.value)), max=Math.max(...pts.map(p=>p.value));
+        if(g<min||g>max) continue;
+        s.createPriceLine({price:g,color:'#bdbdbd',lineWidth:1,lineStyle:0,axisLabelVisible:true,title:g.toLocaleString('en-US')+'%'});
+      }
+    }
+    if(labelsOn){
+      const marks=[];
+      try{
+        const cycles=detectCycles(daily);
+        const byT=new Map(pts.map(p=>[p.time,p]));
+        const near=t=>{
+          let best=null,bd=1e18;
+          for(const p of pts){const d=Math.abs(p.time-t); if(d<bd){bd=d;best=p}}
+          return bd<20*86400?best:null;
+        };
+        for(const c of cycles){
+          const hi=c.high&&near(c.high.time);
+          if(hi) marks.push({time:hi.time,position:'aboveBar',color:'#1565c0',shape:'arrowDown',text:c.year+' peak '+fmt(hi.value)});
+          const lo=c.endLow&&near(c.endLow.time);
+          if(lo&&(!c.high||c.endLow.time!==c.high.time)){
+            const y=new Date(c.endLow.time*1000).getUTCFullYear();
+            marks.push({time:lo.time,position:'belowBar',color:'#1565c0',shape:'arrowUp',text:y+' low '+fmt(lo.value)});
+          }
+        }
+      }catch(e){}
+      let lo=pts[0];
+      for(const p of pts){if(p.value<lo.value) lo=p}
+      marks.push({time:lo.time,position:'belowBar',color:'#333',shape:'arrowUp',text:'Lowest: '+fmt(lo.value)});
+      window.lastScout.lowest=lo;
+      if(marks.length) s.setMarkers(marks);
+    }
+  }
+  hookLegend(ch,t=>{
+    const p=pts.find(x=>x.time===t); if(!p) return '';
+    return isoUTC(t)+'  ·  $'+usd(p.close)+'  ·  '+fmt(p.value)+(mode==='mult'?'x':'');
+  });
+  ch.timeScale().fitContent();
+  setTimeout(()=>ch.timeScale().fitContent(),50);
 }
 

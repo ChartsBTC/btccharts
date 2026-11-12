@@ -111,7 +111,7 @@ body.scout-sats #main{height:480px}
 body.scout-sats #scaleToggle{display:none}
 .chart-overlay{position:absolute;inset:0;pointer-events:none;z-index:8}
 
-.scout-opts{display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-weight:bold;color:#333}
+.scout-opts{display:none;flex-wrap:wrap;align-items:center;gap:8px 12px;font-weight:bold;color:#333}
 .scout-opts label{display:inline-flex;align-items:center;gap:4px;font-weight:normal}
 .scout-opts select{font-size:12px;max-width:180px}
 body.scout-pricema #priceMaOpts{display:inline-flex}
@@ -119,3 +119,8 @@ body.scout-pricema #scaleToggle,body.scout-pricema #markerBox,body.scout-pricema
 body.scout-pricema #main{height:340px}
 body.scout-pricema.scout-osc #main{height:480px}
 body.scout-pricema .sub.scout-ratio{height:200px}
+
+body.scout-returns #returnsOpts{display:inline-flex}
+body.scout-returns.mode-mult #rnBox{display:none}
+body.scout-returns #scaleToggle,body.scout-returns #markerBox,body.scout-returns #ratioBox,body.scout-returns #ratioLogBox{display:none}
+body.scout-returns #main{height:480px}
