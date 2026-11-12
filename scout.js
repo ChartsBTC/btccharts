@@ -947,6 +947,7 @@ async function renderScout(kind){
   if(kind==='epoch'){await renderEpochCandlesView();return true}
   if(kind==='calyear'){await renderCalYearView();return true}
   if(kind==='onthisday'){await renderOnThisDayView();return true}
+  if(kind==='hcycles'){await renderHcyclesView();return true}
   return false;
 }
 
@@ -2052,3 +2053,179 @@ window.syncOnThisDayUi=syncOnThisDayUi;
 window.readOnThisDay=readOnThisDay;
 window.writeOnThisDay=writeOnThisDay;
 window.formatUsdLabel=formatUsdLabel;
+
+function halvingUsdCycles(daily){
+  const hs=HALVINGS.slice();
+  const lastT=daily.at(-1).time;
+  const cycles=[];
+  for(let i=0;i<hs.length;i++){
+    const start=hs[i].time;
+    const end=i+1<hs.length?hs[i+1].time:lastT;
+    const pts=[];
+    for(const b of daily){
+      if(b.time<start-12*3600) continue;
+      if(b.time>end+12*3600) break;
+      if(!(b.close>0)) continue;
+      pts.push({day:Math.round((b.time-start)/86400), price:b.close, bar:b});
+    }
+    if(pts.length<2) continue;
+    cycles.push({
+      i:i+1,
+      label:hs[i].label,
+      start, end,
+      current:i===hs.length-1,
+      pts,
+    });
+  }
+  return cycles;
+}
+function envelopeOfCycles(cycles){
+  let maxD=0;
+  for(const c of cycles) maxD=Math.max(maxD, c.pts.at(-1).day);
+  const mins=new Array(maxD+1).fill(null);
+  const maxs=new Array(maxD+1).fill(null);
+  for(const c of cycles){
+    // interpolate missing days with last value (daily should be dense)
+    const by=new Map(c.pts.map(p=>[p.day,p.price]));
+    let last=null;
+    for(let d=0;d<=c.pts.at(-1).day;d++){
+      if(by.has(d)) last=by.get(d);
+      if(!(last>0)) continue;
+      if(mins[d]==null||last<mins[d]) mins[d]=last;
+      if(maxs[d]==null||last>maxs[d]) maxs[d]=last;
+    }
+  }
+  return {mins,maxs,maxD};
+}
+
+async function renderHcyclesView(){
+  clearCharts();
+  document.body.classList.add('scout-view','scout-hcycles');
+  $('charts').classList.remove('has-volume');
+  const daily=await scoutDailyBars();
+  const cycles=halvingUsdCycles(daily);
+  if(cycles.length<2){status('Not enough halving cycles to plot.');return}
+  const env=envelopeOfCycles(cycles);
+  window.lastScout={kind:'hcycles',cycles,env};
+  const cur=cycles.find(c=>c.current)||cycles.at(-1);
+  const last=cur.pts.at(-1);
+  status(cycles.length+' halving cycles · current day '+last.day+' · last '+formatUsdLabel(last.price));
+  const main=$('main');
+  main.innerHTML='';
+  $('subs').innerHTML='';
+  setEpochLegend(false);
+
+  const lineColors=['#8d6e63','#ef6c00','#1565c0','#111'];
+  attachPaintCanvas(main,(ctx,w,h)=>{
+    const th=T();
+    const dark=typeof isDark==='function'&&isDark();
+    ctx.fillStyle=th.bg; ctx.fillRect(0,0,w,h);
+    const padL=64, padR=136, padT=16, padB=44;
+    const plotW=w-padL-padR, plotH=h-padT-padB;
+    if(plotW<80||plotH<80) return;
+    const xMax=Math.max(env.maxD, 1400);
+    let yMax=0;
+    for(const c of cycles) for(const p of c.pts) if(p.price>yMax) yMax=p.price;
+    yMax=niceLinearMax(yMax*1.08);
+    const xOf=d=>padL+plotW*(d/xMax);
+    const yOf=v=>padT+plotH*(1-v/yMax);
+    // grid
+    ctx.font='11px Verdana,Arial,sans-serif';
+    ctx.strokeStyle=th.grid; ctx.lineWidth=1;
+    const xStep=xMax>1600?200:100;
+    ctx.fillStyle=th.text; ctx.textAlign='center'; ctx.textBaseline='top';
+    for(let d=0;d<=xMax;d+=xStep){
+      const x=xOf(d);
+      ctx.beginPath(); ctx.moveTo(x,padT); ctx.lineTo(x,padT+plotH); ctx.strokeStyle=th.grid; ctx.stroke();
+      ctx.fillStyle=th.text; ctx.fillText(String(d), x, padT+plotH+8);
+    }
+    const yTicks=6;
+    ctx.textAlign='right'; ctx.textBaseline='middle';
+    for(let i=0;i<=yTicks;i++){
+      const v=yMax*i/yTicks;
+      const y=yOf(v);
+      ctx.strokeStyle=th.grid; ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(padL+plotW,y); ctx.stroke();
+      ctx.fillStyle=th.text; ctx.fillText(formatAxisUsd(v,true), padL-8, y);
+    }
+    ctx.strokeStyle=th.border; ctx.strokeRect(padL,padT,plotW,plotH);
+    ctx.fillStyle=th.muted||th.text;
+    ctx.font='10px Verdana,Arial,sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.fillText('Days since halving', padL+plotW/2, h-4);
+
+    // envelope, colored by slope of the upper bound (runs of up/down)
+    const upFill=dark?'rgba(255,152,0,0.38)':'rgba(255,152,0,0.35)';
+    const dnFill=dark?'rgba(66,165,245,0.38)':'rgba(66,165,245,0.38)';
+    const ok=d=>env.maxs[d]>0&&env.mins[d]>0;
+    const risingAt=d=>ok(d)&&ok(d+1)&&env.maxs[d+1]>=env.maxs[d];
+    let d=0;
+    while(d<env.maxD){
+      while(d<env.maxD&&!ok(d)) d++;
+      if(d>=env.maxD) break;
+      // Color by a 14-day slope so daily noise doesn't stripe the fill.
+      const up=ok(d)&&ok(Math.min(d+14,env.maxD))&&env.maxs[Math.min(d+14,env.maxD)]>=env.maxs[d];
+      let e=d+1;
+      while(e<env.maxD&&ok(e)&&risingAt(e)===up) e++;
+      ctx.fillStyle=up?upFill:dnFill;
+      ctx.beginPath();
+      ctx.moveTo(xOf(d), yOf(env.maxs[d]));
+      for(let i=d+1;i<=e;i++) if(ok(i)) ctx.lineTo(xOf(i), yOf(env.maxs[i]));
+      for(let i=e;i>=d;i--) if(ok(i)) ctx.lineTo(xOf(i), yOf(env.mins[i]));
+      ctx.closePath();
+      ctx.fill();
+      d=e;
+    }
+
+    // cycle lines, current on top
+    const draw=c=>{
+      const col=c.current?(dark?'#f5f5f5':'#111'):(lineColors[(c.i-1)%lineColors.length]);
+      ctx.strokeStyle=col; ctx.lineWidth=c.current?2.2:1.3; ctx.lineJoin='round'; ctx.lineCap='round';
+      ctx.beginPath();
+      let started=false;
+      for(const p of c.pts){
+        if(p.day<0) continue;
+        const x=xOf(p.day), y=yOf(p.price);
+        if(!started){ctx.moveTo(x,y);started=true}else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    };
+    cycles.filter(c=>!c.current).forEach(draw);
+    const curC=cycles.find(c=>c.current);
+    if(curC) draw(curC);
+
+    // legend
+    ctx.font='12px Verdana,Arial,sans-serif';
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    cycles.forEach((c,i)=>{
+      const y=padT+8+i*18;
+      const col=c.current?(dark?'#f5f5f5':'#111'):(lineColors[(c.i-1)%lineColors.length]);
+      ctx.strokeStyle=col; ctx.lineWidth=c.current?2.2:1.8;
+      ctx.beginPath(); ctx.moveTo(padL+plotW+14,y); ctx.lineTo(padL+plotW+30,y); ctx.stroke();
+      ctx.fillStyle=th.text;
+      ctx.font=(c.current?'bold ':'')+'12px Verdana,Arial,sans-serif';
+      ctx.fillText(c.label+(c.current?'  now':''), padL+plotW+36, y);
+    });
+  });
+
+  const cnv=window.scoutCanvas;
+  if(cnv){
+    cnv.style.cursor='crosshair';
+    cnv.addEventListener('mousemove',ev=>{
+      const rect=cnv.getBoundingClientRect();
+      const x=ev.clientX-rect.left;
+      const w=rect.width, padL=64, padR=110, plotW=w-padL-padR;
+      const xMax=Math.max(env.maxD, 1400);
+      if(x<padL||x>padL+plotW){$('legend').textContent='';return}
+      const day=Math.round((x-padL)/plotW*xMax);
+      const bits=['Day '+day];
+      for(const c of cycles){
+        const p=c.pts.find(pt=>pt.day===day)||c.pts.reduce((best,pt)=>Math.abs(pt.day-day)<Math.abs((best?best.day:1e9)-day)?pt:best,null);
+        if(p&&Math.abs(p.day-day)<=2) bits.push(c.label.replace('Halving ','')+' '+formatUsdLabel(p.price));
+      }
+      if(env.mins[day]!=null) bits.push('envelope '+formatUsdLabel(env.mins[day])+'–'+formatUsdLabel(env.maxs[day]));
+      $('legend').textContent=bits.join('  ·  ');
+    });
+    cnv.addEventListener('mouseleave',()=>{$('legend').textContent=''});
+  }
+}
+window.renderHcyclesView=renderHcyclesView;

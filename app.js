@@ -108,6 +108,7 @@ function syncViewToggle(){
   document.body.classList.toggle('scout-epoch',vt==='epoch' && !on);
   document.body.classList.toggle('scout-calyear',vt==='calyear' && !on);
   document.body.classList.toggle('scout-onthisday',vt==='onthisday' && !on);
+  document.body.classList.toggle('scout-hcycles',vt==='hcycles' && !on);
   if(vt==='onthisday' && typeof syncOnThisDayUi==='function') syncOnThisDayUi();
   document.body.classList.toggle('mode-mult',vt==='returns' && ($('rm')&&$('rm').value==='mult') && !on);
   document.querySelectorAll('#viewToggle button').forEach(b=>b.classList.toggle('on',(b.dataset.cy==='1')===on && !vt));
@@ -370,7 +371,7 @@ function drawPowerLawUplot(u,xs,barAt){
 }
 
 let plSeries={};
-function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if(typeof clearScoutPlots==='function')clearScoutPlots();if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view','scout-view','scout-powerlaw','scout-drawdown','scout-ath','scout-sats','scout-pricema','scout-osc','scout-returns','mode-mult','scout-blend','scout-epoch','scout-calyear','scout-onthisday','has-otd-table');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null;if($('plLegend')&&!($('pl')&&$('pl').checked)){$('plLegend').hidden=true;$('plLegend').textContent=''}}
+function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if(typeof clearScoutPlots==='function')clearScoutPlots();if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view','scout-view','scout-powerlaw','scout-drawdown','scout-ath','scout-sats','scout-pricema','scout-osc','scout-returns','mode-mult','scout-blend','scout-epoch','scout-calyear','scout-onthisday','has-otd-table','scout-hcycles');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null;if($('plLegend')&&!($('pl')&&$('pl').checked)){$('plLegend').hidden=true;$('plLegend').textContent=''}}
 
 async function draw(pushUrl){
   const hash=buildHash();
@@ -763,7 +764,7 @@ function clear_table(){
   if($('loadRaw')) $('loadRaw').textContent='Show data';
 }
 function showTable(){
-  if($('cy').checked) fillCycleTable(); else if(typeof scoutView==='function'&&scoutView()==='powerlaw') fillPowerLawTable(); else if(scoutView()==='drawdown') fillDrawdownTable(); else if(scoutView()==='ath') fillAthTable(); else if(scoutView()==='sats') fillSatsTable(); else if(scoutView()==='pricema') fillPriceMaTable(); else if(scoutView()==='returns') fillReturnsTable(); else if(scoutView()==='epoch') fillEpochTable(); else if(scoutView()==='calyear') fillCalYearTable(); else if(scoutView()==='onthisday') fillOnThisDayTable(); else fillPriceTable();
+  if($('cy').checked) fillCycleTable(); else if(typeof scoutView==='function'&&scoutView()==='powerlaw') fillPowerLawTable(); else if(scoutView()==='drawdown') fillDrawdownTable(); else if(scoutView()==='ath') fillAthTable(); else if(scoutView()==='sats') fillSatsTable(); else if(scoutView()==='pricema') fillPriceMaTable(); else if(scoutView()==='returns') fillReturnsTable(); else if(scoutView()==='epoch') fillEpochTable(); else if(scoutView()==='calyear') fillCalYearTable(); else if(scoutView()==='onthisday') fillOnThisDayTable(); else if(scoutView()==='hcycles') fillHcyclesTable(); else fillPriceTable();
   tableOpen=true;
   $('tableWrap').hidden=false;
   $('downloadCsv').hidden=false;
@@ -812,6 +813,19 @@ function fillCycleTable(){
     }
   }
   $('chart_table').tBodies[0].innerHTML=parts.join('');
+}
+function fillHcyclesTable(){
+  const s=window.lastScout||{}, cycles=s.cycles||[];
+  const head=['Days since halving'].concat(cycles.map(c=>c.label));
+  setTableHead(head); tableCsv=[head.slice()];
+  const maxD=Math.max(0,...cycles.map(c=>c.pts.length?c.pts.at(-1).day:0));
+  const maps=cycles.map(c=>new Map(c.pts.map(p=>[p.day,p.price])));
+  const rows=[];
+  for(let d=0;d<=maxD;d++){
+    const rec=[String(d)].concat(maps.map(m=>m.has(d)?String(+m.get(d).toFixed(2)):''));
+    if(rec.slice(1).some(Boolean)){ tableCsv.push(rec); rows.push('<tr>'+rec.map(v=>'<td>'+v+'</td>').join('')+'</tr>'); }
+  }
+  $('chart_table').tBodies[0].innerHTML=rows.join('');
 }
 function fillOnThisDayTable(){
   const s=window.lastScout||{}, rows=s.rows||[], rets=s.rets||[];
@@ -976,9 +990,12 @@ function isMobileUa(){
 }
 function chartTitleLine(){
   const vt=($('vt')&&$('vt').value)||'';
-  if(vt==='powerlaw'||vt==='drawdown'||vt==='ath'||vt==='sats'||vt==='pricema'||vt==='returns'||vt==='epoch'||vt==='calyear'||vt==='onthisday'){
+  if(vt==='powerlaw'||vt==='drawdown'||vt==='ath'||vt==='sats'||vt==='pricema'||vt==='returns'||vt==='epoch'||vt==='calyear'||vt==='onthisday'||vt==='hcycles'){
     const m=currentMarket();
     const name=m==='combinedUSD'?'BTC/USD Combined':('BTC/USD '+marketLabel(m).replace(/ \(USD\)/,''));
+    if(vt==='hcycles'){
+      return name+' · Halving cycles (USD)';
+    }
     if(vt==='onthisday'){
       const md=typeof readOnThisDay==='function'?readOnThisDay():{m:0,d:0};
       const lab=md&&md.m?(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][md.m-1]+' '+String(md.d).padStart(2,'0')):'this day';
@@ -1286,6 +1303,14 @@ function shareCaption(){
     if(c&&c.last) bits.push(typeof ratioRankText==='function'?ratioRankText(c):(c.title+' '+formatRatioValue(c.last.value)));
     if(pct&&pct.length) bits.push('percentiles 20/40/60/80 = '+pct.map(v=>formatRatioValue(v)).join(', '));
     if(bars.length) bits.push('Last $'+Number(bars.at(-1).close).toLocaleString('en-US',{maximumFractionDigits:0})+' on '+isoUTC(bars.at(-1).time));
+    return bits.join('. ')+'.';
+  }
+  if(vt==='hcycles'){
+    const s=window.lastScout||{};
+    const cur=(s.cycles||[]).find(c=>c.current)||(s.cycles||[]).at(-1);
+    const last=cur&&cur.pts&&cur.pts.at(-1);
+    bits.push('Bitcoin halving cycles in US dollars, with a min/max envelope');
+    if(last) bits.push('current cycle day '+last.day+', last '+formatUsdLabel(last.price));
     return bits.join('. ')+'.';
   }
   if(vt==='onthisday'){

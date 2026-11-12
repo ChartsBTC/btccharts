@@ -167,6 +167,10 @@ body.scout-onthisday #scaleToggle,body.scout-onthisday #markerBox,body.scout-ont
 body.scout-onthisday #main{height:680px}
 body.scout-onthisday #chartWatermark{left:80px;bottom:72px}
 body.scout-onthisday.has-otd-table #main{height:680px}
+
+body.scout-hcycles #scaleToggle,body.scout-hcycles #markerBox,body.scout-hcycles #ratioBox,body.scout-hcycles #ratioLogBox{display:none}
+body.scout-hcycles #main{height:540px}
+body.scout-hcycles #chartWatermark{bottom:52px}
 .otd-wrap{padding:8px 12px 12px;border-top:1px solid var(--chart-border,#ccc)}
 .otd-table{margin:0;border-collapse:collapse;font-size:12px}
 .otd-table th,.otd-table td{border:1px solid var(--table-border,#ccc);padding:4px 10px;text-align:right}
