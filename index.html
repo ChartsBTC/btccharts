@@ -69,7 +69,17 @@
   <label><input type="checkbox" id="v" checked>Show Volume Bars</label><br>
   <label><input type="checkbox" id="cv">Volume in Currency</label><br>
   <label><input type="checkbox" id="l">Log Scale</label><br>
-  <label><input type="checkbox" id="p">Percentage Scale</label></div>
+  <label><input type="checkbox" id="p">Percentage Scale</label><br>
+  <label id="ratioBox">Ratio panel
+    <select id="rp">
+      <option value="" selected>None</option>
+      <option value="mayer">Mayer Multiple</option>
+      <option value="a1">Price / MA 1</option>
+      <option value="a2">Price / MA 2</option>
+      <option value="pl">Price / Power Law</option>
+    </select>
+  </label><br>
+  <label id="ratioLogBox"><input type="checkbox" id="rpl">Log ratio</label></div>
 </form>
 <div id="content_chart" class="wrap">
  <div class="info">

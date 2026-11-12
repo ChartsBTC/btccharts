@@ -130,6 +130,94 @@ function setEpochLegend(on){
 
 function epochEnabled(){return !!( $('ep')&&$('ep').checked )}
 
+
+let lastRatio=null;
+function ratioKind(){return ($('rp')&&$('rp').value)||''}
+function isMayerRatio(kind, ma, len){
+  return kind==='mayer'||(ma==='SMA'&&+len===200);
+}
+function computeRatio(bars, kind){
+  kind=kind||ratioKind();
+  lastRatio=null;
+  if(!kind||!bars||!bars.length) return null;
+  const C=bars.map(b=>b.close);
+  let overlay=null, title, short, source, ma=null, len=null;
+  if(kind==='mayer'){
+    overlay=TA.SMA(C,200); title='Mayer Multiple'; short='Mayer Multiple'; source='200-day SMA'; ma='SMA'; len=200;
+  }else if(kind==='a1'||kind==='a2'){
+    ma=$(kind).value; len=parseInt($(kind==='a1'?'m1':'m2').value);
+    if(!ma||!(len>0)) return null;
+    overlay=TA.MA(ma,C,len);
+    source=len+'-day '+ma;
+    if(isMayerRatio(kind,ma,len)){title='Mayer Multiple';short='Mayer Multiple'}
+    else{title='Price / '+source;short=title}
+  }else if(kind==='pl'){
+    const sample=bars.filter(b=>b&&b.close>0);
+    const fit=typeof fitPowerLaw==='function'?fitPowerLaw(sample):null;
+    if(!fit) return null;
+    overlay=bars.map(b=>{
+      const d=daysSinceGenesis(b.time);
+      return d>0?powerLawPrice(d,fit.a,fit.b):null;
+    });
+    title='Price / Power Law'; short=title; source='Power Law';
+  }else return null;
+  const points=[];
+  for(let i=0;i<bars.length;i++){
+    const o=overlay[i], px=bars[i].close;
+    if(!(o>0)||!(px>0)) continue;
+    points.push({time:bars[i].time,value:px/o,overlay:o,close:px});
+  }
+  if(points.length<2) return null;
+  lastRatio={kind,title,short,source,overlay,points,last:points.at(-1),ma,len};
+  return lastRatio;
+}
+function formatRatioValue(v){
+  if(v==null||!isFinite(v)) return '';
+  if(v>=10) return v.toFixed(2);
+  return v.toFixed(3);
+}
+function ensureRatioOverlay(chart, bars){
+  const kind=ratioKind();
+  if(!kind||!chart||!bars) return;
+  const C=bars.map(b=>b.close);
+  if(kind==='mayer'){
+    const has=($('a1')&&$('a1').value==='SMA'&&+$('m1').value===200)||($('a2')&&$('a2').value==='SMA'&&+$('m2').value===200);
+    if(!has){
+      const ma=TA.SMA(C,200);
+      const s=chart.addLineSeries({color:'#e53935',lineWidth:2,priceLineVisible:false,lastValueVisible:false,title:'200-day SMA'});
+      s.setData(bars.map((b,i)=>{const v=ma[i];return v==null||!isFinite(v)?{time:b.time}:{time:b.time,value:v}}));
+    }
+  }
+}
+function addRatioPanel(computed, opts){
+  opts=opts||{};
+  if(!computed||!computed.points||computed.points.length<2) return null;
+  const host=opts.host||$('subs');
+  const el=document.createElement('div');
+  el.className='sub scout-ratio'+(opts.big?' big':'');
+  el.innerHTML='<span class="lbl">'+computed.title+'</span>';
+  if(opts.prepend&&host.firstChild) host.insertBefore(el,host.firstChild);
+  else host.appendChild(el);
+  const log=opts.log!=null?!!opts.log:!!($('rpl')&&$('rpl').checked);
+  const ch=mkChart(el,{timeScale:{visible:!!opts.timeVisible}});
+  if(opts.sync!==false) charts.push(ch);
+  const ls=ch.addLineSeries({
+    color:opts.color||'#1565c0',
+    lineWidth:1.5,
+    priceLineVisible:false,
+    lastValueVisible:true,
+    priceFormat:{type:'price',precision:3,minMove:0.001},
+  });
+  ls.setData(computed.points.map(p=>({time:p.time,value:p.value})));
+  ls.createPriceLine({price:1,color:'#e53935',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'1.0'});
+  ch.priceScale('right').applyOptions({
+    mode:log?LW.PriceScaleMode.Logarithmic:LW.PriceScaleMode.Normal,
+    scaleMargins:{top:.08,bottom:.08},
+    minimumWidth:80,
+  });
+  return {chart:ch,computed};
+}
+
 window.EPOCH_COLORS=EPOCH_COLORS;
 window.EPOCH_NAMES=EPOCH_NAMES;
 window.epochIndex=epochIndex;
@@ -141,3 +229,9 @@ window.drawEpochUplotLine=drawEpochUplotLine;
 window.paintEpochLegend=paintEpochLegend;
 window.setEpochLegend=setEpochLegend;
 window.epochEnabled=epochEnabled;
+Object.defineProperty(window,'lastRatio',{get:()=>lastRatio,set:v=>{lastRatio=v}});
+window.computeRatio=computeRatio;
+window.addRatioPanel=addRatioPanel;
+window.ensureRatioOverlay=ensureRatioOverlay;
+window.formatRatioValue=formatRatioValue;
+window.ratioKind=ratioKind;

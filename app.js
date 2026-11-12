@@ -1,6 +1,6 @@
 const $=id=>document.getElementById(id);
 const LW=LightweightCharts;
-const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','cy','ca','cp','ch','cl','hv','ll','pl','ep'];
+const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','cy','ca','cp','ch','cl','hv','ll','pl','ep','rp','rpl'];
 // populate indicator selects (only implemented ones, original naming)
 document.querySelectorAll('select.ind').forEach(s=>{s.innerHTML='<option value="">None</option>'+Object.entries(INDICATORS).map(([k,v])=>`<option value="${k}">${v.label.replace(/ \(.*/,'')}</option>`).join('')});
 
@@ -266,7 +266,7 @@ function drawPowerLawUplot(u,xs,barAt){
 }
 
 let plSeries={};
-function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view');if(typeof setEpochLegend==='function')setEpochLegend(false)}
+function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null}
 
 async function draw(pushUrl){
   const hash=buildHash();
@@ -562,6 +562,7 @@ function render(interval, marks){
   if(b==='E'){const m=TA.SMA(C,20);line(m.map(v=>v&&v*1.1),'#9e9e9e');line(m.map(v=>v&&v*0.9),'#9e9e9e')}
   // moving averages
   [['a1','m1','#ff9800'],['a2','m2','#2962ff']].forEach(([a,m,col])=>{const n=parseInt($(m).value);if($(a).value&&n>0)line(TA.MA($(a).value,C,n),col,2)});
+  if(typeof ensureRatioOverlay==='function') ensureRatioOverlay(main,bars);
   // volume overlay
   if($('v').checked){const vs=main.addHistogramSeries({priceScaleId:'vol',priceFormat:{type:'volume'},lastValueVisible:false,priceLineVisible:false});
     main.priceScale('vol').applyOptions({scaleMargins:{top:.8,bottom:0}});
@@ -575,11 +576,15 @@ function render(interval, marks){
       else{const ls=ch.addLineSeries({color:s.color,lineWidth:1.5,priceLineVisible:false});ls.setData(ser(s.data));
         (def.levels||[]).forEach(v=>ls.createPriceLine({price:v,color:'#bbb',lineWidth:1,lineStyle:2,axisLabelVisible:false}))}}
   }
+  if(typeof computeRatio==='function'&&ratioKind()){
+    const ratio=computeRatio(bars);
+    if(ratio) addRatioPanel(ratio,{prepend:true});
+  }else window.lastRatio=null
   // equal right-scale width + synced scroll/zoom across panels
   charts.forEach(c=>c.priceScale('right').applyOptions({minimumWidth:80}));
   charts.forEach(c=>c.timeScale().subscribeVisibleLogicalRangeChange(r=>{if(syncing||!r)return;syncing=true;charts.forEach(o=>o!==c&&o.timeScale().setVisibleLogicalRange(r));syncing=false}));
   main.timeScale().fitContent();setTimeout(()=>main.timeScale().fitContent(),50);
-  if($('pl')&&$('pl').checked){let _plT;const refit=()=>{clearTimeout(_plT);_plT=setTimeout(()=>applyPowerLawLW(main),80)};main.timeScale().subscribeVisibleLogicalRangeChange(refit);setTimeout(()=>applyPowerLawLW(main),80)} else setPlLegend(null);
+  if(($('pl')&&$('pl').checked)||($('rp')&&$('rp').value==='pl')){let _plT;const refit=()=>{clearTimeout(_plT);_plT=setTimeout(()=>applyPowerLawLW(main),80)};main.timeScale().subscribeVisibleLogicalRangeChange(refit);setTimeout(()=>applyPowerLawLW(main),80)} else setPlLegend(null);
   main.subscribeCrosshairMove(p=>{const bar=p.time&&bars.find(x=>x.time===p.time);
     $('legend').textContent=bar?`${new Date(bar.time*1000).toISOString().slice(0,16).replace('T',' ')} O ${bar.open} H ${bar.high} L ${bar.low} C ${bar.close} V ${bar.volume.toFixed(2)}`:''});
 }
@@ -606,14 +611,23 @@ function showTable(){
 function toggleTable(e){if(e)e.preventDefault();if(tableOpen)clear_table();else showTable()}
 function fillPriceTable(){
   const epOn=typeof epochEnabled==='function'&&epochEnabled();
-  const head=epOn?PRICE_HEAD.concat(['Epoch']):PRICE_HEAD;
+  const ratio=typeof computeRatio==='function'&&ratioKind()? (window.lastRatio||computeRatio(bars)):null;
+  const head=PRICE_HEAD.slice();
+  if(epOn) head.push('Epoch');
+  if(ratio){head.push(ratio.source||'Overlay');head.push(ratio.title)}
   setTableHead(head); tableCsv=[head.slice()];
+  const ratioByTime=new Map((ratio?ratio.points:[]).map(p=>[p.time,p]));
   $('chart_table').tBodies[0].innerHTML=bars.slice().reverse().map(b=>{
     const w=(b.high+b.low+2*b.close)/4;
     const rec=[new Date(b.time*1000).toISOString().slice(0,19).replace('T',' '),
       String(b.open),String(b.high),String(b.low),String(b.close),
       b.volume.toFixed(2),(b.volume*b.close).toFixed(2),w.toFixed(2)];
     if(epOn) rec.push(String(epochIndex(b.time)+1));
+    if(ratio){
+      const rp=ratioByTime.get(b.time);
+      rec.push(rp&&rp.overlay!=null?String(+rp.overlay.toPrecision(6)):'');
+      rec.push(rp?formatRatioValue(rp.value):'');
+    }
     tableCsv.push(rec);
     return '<tr>'+rec.map(c=>'<td>'+c+'</td>').join('')+'</tr>';
   }).join('');
@@ -670,7 +684,7 @@ function chartTitleLine(){
   const preset=(typeof isCyclePreset==='function'&&isCyclePreset($('r').value))
     ?($('r').selectedOptions[0]?$('r').selectedOptions[0].text+' · ':'')
     :'';
-  return `${name} · ${preset}${interval} · ${scale}`+(($('pl')&&$('pl').checked)?' · Power Law':'')+(typeof epochEnabled==='function'&&epochEnabled()?' · Epoch colors':'');
+  return `${name} · ${preset}${interval} · ${scale}`+(($('pl')&&$('pl').checked)?' · Power Law':'')+(typeof epochEnabled==='function'&&epochEnabled()?' · Epoch colors':'')+(window.lastRatio?' · '+window.lastRatio.title:'');
 }
 function exportFilename(){
   const slug=chartTitleLine().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
@@ -887,6 +901,9 @@ function shareCaption(){
   if(bars.length){
     const last=bars.at(-1);
     bits.push('Last $'+Number(last.close).toLocaleString('en-US',{maximumFractionDigits:0})+' on '+isoUTC(last.time));
+  }
+  if(window.lastRatio&&window.lastRatio.last){
+    bits.push(window.lastRatio.title+' '+formatRatioValue(window.lastRatio.last.value));
   }
   return bits.join('. ')+'.';
 }
