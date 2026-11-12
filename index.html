@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
-<title>Bitcoin Charts / Charts</title>
+<title>Bitcoin Charts / Classic</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="BTC/USD combined history — log, log-log, cycles, and power-law charts.">
-<meta property="og:title" content="Bitcoin Charts">
-<meta property="og:description" content="BTC/USD combined history — log, log-log, cycles, and power-law charts.">
+<meta name="description" content="BTC/USD combined history — a bitcoincharts-style price chart with log or linear scale, indicators, and image export.">
+<meta property="og:title" content="Bitcoin Charts — Classic">
+<meta property="og:description" content="BTC/USD combined history — a bitcoincharts-style price chart with log or linear scale, indicators, and image export.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://chartsbtc.github.io/btccharts/">
 <meta property="og:image" content="https://chartsbtc.github.io/btccharts/og-image.png">
@@ -12,17 +12,18 @@
 <meta property="og:image:height" content="630">
 <meta property="og:site_name" content="Bitcoin Charts">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Bitcoin Charts">
-<meta name="twitter:description" content="BTC/USD combined history — log, log-log, cycles, and power-law charts.">
+<meta name="twitter:title" content="Bitcoin Charts — Classic">
+<meta name="twitter:description" content="BTC/USD combined history — a bitcoincharts-style price chart with log or linear scale, indicators, and image export.">
 <meta name="twitter:image" content="https://chartsbtc.github.io/btccharts/og-image.png">
 <link rel="canonical" href="https://chartsbtc.github.io/btccharts/">
 <link rel="stylesheet" href="vendor/uPlot.min.css"><link rel="stylesheet" href="style.css"></head>
-<body>
+<body class="page-classic">
+<script>window.CHART_PAGE="classic";</script>
 <div id="header"><div class="wrap"><a href="#" id="logo">Bitcoin Charts</a>
 <ul id="menu"><li><a class="active">Charts</a></li></ul>
 <span id="status" class="timestamp"></span>
   <button type="button" id="themeToggle" title="Toggle dark mode">Dark</button></div></div>
-<div class="submenu wrap"><a class="active">Pricechart</a></div>
+<div class="submenu wrap"><a class="active" href="./">Classic</a> · <a href="advanced/">Advanced charts</a></div>
 <form id="chartoptions" class="wrap" onsubmit="return false">
  <div class="col"><h6>Symbol</h6>
   <select id="m">

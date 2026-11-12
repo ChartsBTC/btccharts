@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Bitcoin Charts / Advanced</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Advanced BTC/USD charts: cycles, log-log, power law, ratio and percentile panels, rolling returns, and more.">
+<meta property="og:title" content="Bitcoin Charts — Advanced">
+<meta property="og:description" content="Advanced BTC/USD charts: cycles, log-log, power law, ratio and percentile panels, rolling returns, and more.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://chartsbtc.github.io/btccharts/advanced/">
+<meta property="og:image" content="https://chartsbtc.github.io/btccharts/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:site_name" content="Bitcoin Charts">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Bitcoin Charts — Advanced">
+<meta name="twitter:description" content="Advanced BTC/USD charts: cycles, log-log, power law, ratio and percentile panels, rolling returns, and more.">
+<meta name="twitter:image" content="https://chartsbtc.github.io/btccharts/og-image.png">
+<link rel="canonical" href="https://chartsbtc.github.io/btccharts/advanced/">
+<link rel="stylesheet" href="../vendor/uPlot.min.css"><link rel="stylesheet" href="../style.css"></head>
+<body class="page-advanced">
+<script>window.CHART_PAGE="advanced";</script>
+<div id="header"><div class="wrap"><a href="../" id="logo">Bitcoin Charts</a>
+<ul id="menu"><li><a class="active">Charts</a></li></ul>
+<span id="status" class="timestamp"></span>
+  <button type="button" id="themeToggle" title="Toggle dark mode">Dark</button></div></div>
+<div class="submenu wrap"><a href="../">Classic</a> · <a class="active" href="./">Advanced charts</a></div>
+<form id="chartoptions" class="wrap" onsubmit="return false">
+ <div class="col"><h6>Symbol</h6>
+  <select id="m">
+    <option value="combinedUSD" selected>Combined history</option>
+    <optgroup label="USD">
+      <option value="coinbaseUSD">Coinbase (USD)</option>
+      <option value="bitstampUSD">Bitstamp (USD)</option>
+      <option value="mtgoxUSD">Mt. Gox (USD)</option>
+    </optgroup>
+  </select>
+  <input id="SubmitButton" type="submit" value="Draw"></div>
+ <div class="col price-only"><h6>Time Period</h6>
+  <select id="r">
+   <option value="1">1 day</option><option value="2">2 days</option><option value="5">5 days</option><option value="10">10 days</option>
+   <option value="30">1 month</option><option value="60" selected>2 months</option><option value="90">3 months</option><option value="120">4 months</option>
+   <option value="150">5 months</option><option value="180">6 months</option><option value="360">1 year</option><option value="730">2 years</option>
+   <option value="1460">4 years</option><option value="2920">8 years</option><option value="">All Data</option>
+   <optgroup label="Cycles">
+    <option value="c2011">Cycle 2011</option>
+    <option value="c2013">Cycle 2013</option>
+    <option value="c2017">Cycle 2017</option>
+    <option value="c2021">Cycle 2021</option>
+    <option value="ccurrent">Current cycle</option>
+   </optgroup></select>
+  <select id="i"><option value="">auto</option><option>1-min</option><option>5-min</option><option>15-min</option><option>30-min</option>
+   <option>Hourly</option><option>2-hour</option><option>3-hour</option><option>6-hour</option><option>12-hour</option><option>Daily</option><option>Weekly</option><option>Monthly</option><option>Quarterly</option><option>Yearly</option><option value="Cycle">4-Year Cycle</option></select><br>
+  <label><input type="checkbox" id="c">Custom Time</label>
+  <div id="CustomTimeBox"><input id="s" type="date"> — <input id="e" type="date"><br>
+   <button type="button" id="Prev">&lt;</button> day <button type="button" id="Next">&gt;</button></div></div>
+ <div class="col price-only"><h6>Chart Type</h6>
+  <select id="t"><option value="">None</option><option value="S" selected>CandleStick</option><option value="C">Closing Price</option>
+   <option value="M">Median Price</option><option value="O">OHLC</option><option value="T">Typical Price</option><option value="W">Weighted Close</option></select>
+  <h6>Price Band</h6>
+  <select id="b"><option value="">None</option><option value="B">Bollinger Band</option><option value="D">Donchian Channel</option><option value="E">Envelop (SMA 20 +/- 10%)</option></select></div>
+ <div class="col price-only"><h6>Moving Averages</h6>
+  <select id="a1"><option value="">None</option><option value="SMA">Simple</option><option value="EMA">Exponential</option><option value="TMA">Triangular</option><option value="WMA">Weighted</option></select>
+  <input id="m1" size="3" value="10"><br>
+  <select id="a2"><option value="">None</option><option value="SMA">Simple</option><option value="EMA">Exponential</option><option value="TMA">Triangular</option><option value="WMA">Weighted</option></select>
+  <input id="m2" size="3" value="25"></div>
+ <div class="col price-only"><h6>Technical Indicators</h6>
+  <label><input type="checkbox" id="x">large indicators</label><br>
+  <select id="i1" class="ind"></select><br><select id="i2" class="ind"></select><br>
+  <select id="i3" class="ind"></select><br><select id="i4" class="ind"></select></div>
+ <div class="col price-only"><h6>Options</h6>
+  <label><input type="checkbox" id="v" checked>Show Volume Bars</label><br>
+  <label><input type="checkbox" id="cv">Volume in Currency</label><br>
+  <label><input type="checkbox" id="l">Log Scale</label><br>
+  <label><input type="checkbox" id="p">Percentage Scale</label><br>
+  <label><input type="checkbox" id="da">Dual axis (log + linear)</label><br>
+  <label id="ratioBox">Ratio panel
+    <select id="rp">
+      <option value="" selected>None</option>
+      <option value="mayer">Mayer Multiple</option>
+      <option value="a1">Price / MA 1</option>
+      <option value="a2">Price / MA 2</option>
+      <option value="pl">Price / Power Law</option>
+    </select>
+  </label><br>
+  <label id="ratioLogBox"><input type="checkbox" id="rpl">Log ratio</label></div>
+</form>
+<div id="content_chart" class="wrap">
+ <div class="info">
+  <span id="scaleToggle" class="seg" role="group" aria-label="Price scale"><button type="button" data-scale="linear">Linear</button><button type="button" data-scale="log">Log</button><button type="button" data-scale="loglog">Log-Log</button></span>
+  <span id="viewToggle" class="seg" role="group" aria-label="View"><button type="button" data-cy="0">Price</button><button type="button" data-cy="1">Cycles</button></span>
+  <label id="scoutViewBox">View
+    <select id="vt">
+      <option value="" selected>Price chart</option>
+      <option value="powerlaw">Power Law</option>
+      <option value="drawdown">Drawdown from ATH</option>
+      <option value="ath">ATHs and days between</option>
+      <option value="sats">Sats per dollar</option>
+      <option value="pricema">Price / MA</option>
+      <option value="returns">Rolling returns</option>
+      <option value="epoch">Halving-epoch candles</option>
+    </select>
+  </label>
+  <span id="priceMaOpts" class="scout-opts" hidden>
+    <label>MA <select id="pma">
+      <option value="200d" selected>200-day</option>
+      <option value="100w">100-week</option>
+      <option value="200w">200-week</option>
+    </select></label>
+    <label>Style <select id="pmm">
+      <option value="panel" selected>Price + ratio</option>
+      <option value="osc">Percentile oscillator</option>
+    </select></label>
+  </span>
+  <span id="returnsOpts" class="scout-opts" hidden>
+    <label>Metric <select id="rm">
+      <option value="cagr" selected>N-year CAGR</option>
+      <option value="roi">N-year ROI</option>
+      <option value="mult">1-year multiple</option>
+    </select></label>
+    <label id="rnBox">N <select id="rn">
+      <option value="1">1 year</option>
+      <option value="2">2 years</option>
+      <option value="4" selected>4 years</option>
+      <option value="8">8 years</option>
+    </select></label>
+    <label><input type="checkbox" id="rcl" checked>Cycle labels</label>
+  </span>
+  <span id="blendOpts" class="scout-opts" hidden>
+    <label><input type="checkbox" id="blp">Blended percentile</label>
+    <label id="blwBox">Ratio weight <input id="blw" type="range" min="0" max="100" value="50" step="5"> <span id="blwVal">50</span>%</label>
+  </span>
+  <span id="pctBandOpts" class="scout-opts" hidden>
+    <label>Percentiles <input id="pb" size="20" value="1, 5, 20, 50, 80, 95, 99" title="Comma-separated percentiles of the displayed ratio"></label>
+    <label><input type="checkbox" id="pbp">Show bands on price</label>
+  </span>
+  <span id="markerBox" class="price-only">
+    <label><input type="checkbox" id="ch">Cycle highs</label>
+    <label><input type="checkbox" id="cl">Cycle lows</label>
+    <label><input type="checkbox" id="hv">Halvings</label>
+    <label><input type="checkbox" id="pl">Power Law</label>
+    <label><input type="checkbox" id="ep">Color by epoch</label>
+  </span>
+  <label id="cycleAlignBox" class="cycle-only">Align
+    <select id="ca">
+      <option value="low" selected>By cycle low</option>
+      <option value="high">By cycle high</option>
+      <option value="halving">By halving date</option>
+      <option value="calendar">4-year calendar (Jan 1)</option>
+    </select>
+  </label>
+  <label id="cyclePriceBox" class="cycle-only">Prices
+    <select id="cp">
+      <option value="usd" selected>Stacked (USD)</option>
+      <option value="low">Scaled: multiple of cycle low</option>
+      <option value="high">Scaled: % of cycle high</option>
+      <option value="day0">Scaled: relative to day 0</option>
+    </select>
+  </label>
+  <input type="checkbox" id="cy" hidden>
+  <input type="checkbox" id="ll" hidden>
+  <a href="#" id="getPermalink">Link to this chart</a> · <a href="#" id="copyImage">Copy image</a> · <span class="share-wrap"><a href="#" id="postToX" aria-haspopup="true" aria-expanded="false">Post to X</a><div id="shareMenu" hidden role="menu"><button type="button" role="menuitem" data-share="link">Post link</button><button type="button" role="menuitem" data-share="image">Post image</button></div></span> · <a href="#" id="downloadPng">Download PNG</a> · <a href="#" id="larger">Larger chart</a> <span id="copyStatus" hidden></span>
+  <span id="legend"></span>
+ </div>
+ <div id="cycleLegend" class="cycle-only"></div>
+ <div id="plLegend" hidden></div>
+ <div id="epochLegend" hidden></div>
+ <div id="permalinkbox" hidden>Use this link to bookmark or share this chart. Select "Custom Time" for a permanent link to a specific date.<br><input id="permalink" readonly></div>
+ <div id="charts"><div id="chartStage"><div id="main"></div><div id="chartWatermark" aria-hidden="true">chartsbtc.github.io/btccharts</div></div><div id="subs"></div></div>
+ <div id="cycleTable" class="cycle-only"></div>
+ <p class="small" id="sourceNote">Daily history cached locally.</p>
+ <p id="dataActions"><a href="#" id="loadRaw">Show data</a> · <a href="#" id="downloadCsv" hidden>Download CSV</a></p>
+ <div id="tableWrap" hidden><table class="data" id="chart_table"><thead></thead><tbody></tbody></table></div>
+</div>
+<script src="../vendor/lightweight-charts.js"></script>
+<script src="../vendor/uPlot.iife.min.js"></script>
+<script src="../indicators.js"></script>
+<script src="../cycles.js"></script>
+<script src="../scout.js"></script>
+<script src="../data.js"></script>
+<script src="../app.js"></script>
+</body></html>

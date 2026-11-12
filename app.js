@@ -1,6 +1,36 @@
 const $=id=>document.getElementById(id);
 const LW=LightweightCharts;
 
+const PUBLIC_CHART_BASE='https://chartsbtc.github.io/btccharts/';
+const ADVANCED_HASH_IDS=['cy','ll','pl','vt','rp','rpl','ep','ch','cl','hv','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','da','ca','cp'];
+function isClassicPage(){return window.CHART_PAGE==='classic'}
+function isAdvancedPage(){return window.CHART_PAGE==='advanced'}
+function hashHasAdvanced(hash){
+  const parts=String(hash||'').replace(/^#/,'').split('z').filter(Boolean);
+  const ids=ADVANCED_HASH_IDS.slice().sort((a,b)=>b.length-a.length);
+  return parts.some(part=>ids.some(id=>part===id||part.startsWith(id+'g')));
+}
+function siteRootPath(){
+  let path=location.pathname;
+  path=path.replace(/\/index\.html$/,'/');
+  if(path.endsWith('/advanced/')) path=path.slice(0,-'advanced/'.length);
+  else if(/\/advanced$/.test(path)) path=path.replace(/\/advanced$/,'/');
+  if(!path.endsWith('/')) path=path.replace(/[^/]+$/,'');
+  return path;
+}
+function pageHref(which, hash){
+  const h=String(hash||'').replace(/^#/,'');
+  const root=siteRootPath();
+  return (which==='advanced'?root+'advanced/':root)+(h?'#'+h:'');
+}
+function publicPageUrl(which, hash){
+  const h=String(hash||'').replace(/^#/,'');
+  const base=PUBLIC_CHART_BASE.replace(/\/?$/,'/');
+  return (which==='advanced'?base+'advanced/':base)+(h?'#'+h:'');
+}
+
+
+
 const THEME_KEY='btccharts-theme';
 function systemDark(){return !!(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)}
 function isDark(){return document.documentElement.classList.contains('dark')}
@@ -49,13 +79,14 @@ const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2',
 document.querySelectorAll('select.ind').forEach(s=>{s.innerHTML='<option value="">None</option>'+Object.entries(INDICATORS).map(([k,v])=>`<option value="${k}">${v.label.replace(/ \(.*/,'')}</option>`).join('')});
 
 // ---- URL hash: <id>g<value> joined by z (bitcoincharts format) ----
-function buildHash(){const h=[];for(const id of FIELDS){const e=$(id);
+function buildHash(){const h=[];const skip=isClassicPage()?new Set(ADVANCED_HASH_IDS):null;
+  for(const id of FIELDS){if(skip&&skip.has(id))continue;const e=$(id);if(!e)continue;
   if(e.type==='checkbox'){if(e.checked)h.push(id)}else if(e.value)h.push(id+'g'+escape(e.value))}
   if(typeof isDark==='function'&&isDark())h.push('dk');
   return h.join('z')}
 function parseHash(hash){ if(!hash)return;
   // reset everything to blank/unchecked; hash fully describes state (original reset v,t,r)
-  for(const id of FIELDS){const e=$(id);if(id==='m'){e.value='combinedUSD';continue}if(e.type==='checkbox')e.checked=false;else e.value=({m1:'10',m2:'25',ca:'low',cp:'usd',pma:'200d',pmm:'panel',rm:'cagr',rn:'4',pb:'1, 5, 20, 50, 80, 95, 99',blw:'50'})[id]||''}
+  for(const id of FIELDS){const e=$(id);if(!e)continue;if(id==='m'){e.value='combinedUSD';continue}if(e.type==='checkbox')e.checked=false;else e.value=({m1:'10',m2:'25',ca:'low',cp:'usd',pma:'200d',pmm:'panel',rm:'cagr',rn:'4',pb:'1, 5, 20, 50, 80, 95, 99',blw:'50'})[id]||''}
   // Longest-id match so values may contain "g" (e.g. mgmtgoxUSD). The original split("g") would turn that into mtogxUSD.
   const ids=FIELDS.slice().sort((a,b)=>b.length-a.length);
   for(const part of hash.split('z')){const id=ids.find(x=>part===x||part.startsWith(x+'g'));if(!id)continue;const e=$(id);
@@ -338,8 +369,9 @@ function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(up
 
 async function draw(pushUrl){
   const hash=buildHash();
-  const url=location.href.replace(/#.*$/,'')+'#'+hash;$('permalink').value=url;
-  if(pushUrl===1)history.pushState(hash,'','#'+hash);else if(pushUrl===2)history.replaceState(hash,'','#'+hash);
+  const url=location.pathname+location.search+'#'+hash;
+  if($('permalink'))$('permalink').value=location.origin+url;
+  if(pushUrl===1)history.pushState(hash,'',url);else if(pushUrl===2)history.replaceState(hash,'',url);
   syncViewToggle();syncScaleToggle();
   if($('cy').checked){await drawCycles();return}
   // time window
@@ -1137,9 +1169,10 @@ window.composeChartImage=composeChartImage;
 window.exportChartPng=async()=>canvasToBlob(await composeChartImage());
 
 
-const PUBLIC_CHART_BASE='https://chartsbtc.github.io/btccharts/';
 function currentPermalink(){
-  return PUBLIC_CHART_BASE+'#'+buildHash();
+  const hash=buildHash();
+  const which=(isAdvancedPage()||(!isClassicPage()&&hashHasAdvanced(hash)))?'advanced':'classic';
+  return publicPageUrl(which, hash);
 }
 function shareCaption(){
   const bits=[];
@@ -1354,9 +1387,10 @@ $('downloadPng').onclick=downloadChartPng;
 $('loadRaw').onclick=toggleTable;
 $('downloadCsv').onclick=downloadCsv;
 $('larger').onclick=e=>{e.preventDefault();document.body.classList.toggle('wide')};
-window.onpopstate=()=>{parseHash(location.hash.slice(1));initTheme();syncCustom();syncViewToggle();draw(0)};
+window.onpopstate=()=>{if(isClassicPage()&&hashHasAdvanced(location.hash)){location.replace(pageHref('advanced', location.hash.slice(1)));return}parseHash(location.hash.slice(1));initTheme();syncCustom();syncViewToggle();draw(0)};
 // init: original defaults = 60 days, candlestick, MA 10/25 lengths, volume on
-parseHash(location.hash.slice(1));initTheme();syncCustom();syncViewToggle();draw(2);
+if(isClassicPage()&&hashHasAdvanced(location.hash)){location.replace(pageHref('advanced', location.hash.slice(1)));}
+else{parseHash(location.hash.slice(1));initTheme();syncCustom();syncViewToggle();draw(2);}
 
 window.isDark=isDark;
 window.chartTheme=chartTheme;

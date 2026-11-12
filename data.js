@@ -49,7 +49,8 @@ function clampRow(r){const lo=Math.min(r[1],r[4]),hi=Math.max(r[1],r[4]);
 async function getDaily(market){
   market=market||currentMarket();
   if(dailyCache[market])return dailyCache[market];
-  const base=await (await fetch('data/'+market+'.json',{cache:'no-cache'})).json();
+  const dataBase=(window.CHART_PAGE==='advanced')?'../data/':'data/';
+  const base=await (await fetch(dataBase+market+'.json',{cache:'no-cache'})).json();
   const live=(MARKETS[market]||{}).live;
   const last=base.length?base[base.length-1][0]:0;
   const now=Math.floor(Date.now()/1000);let fresh=[];

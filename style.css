@@ -165,3 +165,21 @@ table.data td,table.data th,table.cycles td,table.cycles th{border-color:var(--t
 #plLegend,#sourceNote,.info,.small{color:var(--muted)}
 html.dark #header{background:#0a0a0a}
 html.dark .leg-item{color:var(--fg)}
+
+/* Classic page hides advanced-only controls */
+body.page-classic .advanced-only,
+body.page-classic #viewToggle,
+body.page-classic #scoutViewBox,
+body.page-classic #markerBox,
+body.page-classic #ratioBox,
+body.page-classic #ratioLogBox,
+body.page-classic #pctBandOpts,
+body.page-classic #blendOpts,
+body.page-classic #priceMaOpts,
+body.page-classic #returnsOpts,
+body.page-classic #scaleToggle [data-scale="loglog"],
+body.page-classic label:has(#da),
+body.page-classic #r optgroup,
+body.page-classic #i option[value="Cycle"]{display:none !important}
+.submenu a{text-decoration:none;margin:0 2px}
+.submenu a.active{color:var(--fg)}

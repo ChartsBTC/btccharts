@@ -1,5 +1,8 @@
 # btccharts-clone
-Static bitcoincharts.com-style chart page.
+Static bitcoincharts.com-style chart page, split into two views that share the same JavaScript and data:
+
+- **Classic** (`index.html`, the site root): market, time range, interval, indicators, log/linear, chart types, data/CSV, watermark, Copy image, Post to X, and dark mode, plus a link to Advanced charts. Permalinks that contain advanced-only hash keys (cycles, log-log, power law, view selector, ratio/percentile/blend, markers, dual axis, etc.) redirect to the advanced page with the same hash.
+- **Advanced** (`advanced/`): everything in Classic plus cycles, log-log, power law, ratio and percentile bands, blended percentile, all View-selector charts, cycle markers, and presets, with a link back to Classic.
 
 - Serve: `cd /workspace/btccharts-clone && python3 serve.py`, then open http://127.0.0.1:8765/
 - Refresh daily caches: `python3 fetch_history.py` (writes data/coinbaseUSD.json, bitstampUSD.json, mtgoxUSD.json, combinedUSD.json). Sources and splice dates: data/SOURCES.md. The page also tops up the latest Coinbase/Bitstamp days live.
