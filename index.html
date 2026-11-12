@@ -1,0 +1,64 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Bitcoin Charts / Charts</title>
+<link rel="stylesheet" href="style.css"></head>
+<body>
+<div id="header"><div class="wrap"><a href="#" id="logo">Bitcoin Charts</a>
+<ul id="menu"><li><a class="active">Charts</a></li></ul>
+<span id="status" class="timestamp"></span></div></div>
+<div class="submenu wrap"><a class="active">Pricechart</a></div>
+<form id="chartoptions" class="wrap" onsubmit="return false">
+ <div class="col"><h6>Symbol</h6>
+  <select id="m">
+    <option value="combinedUSD" selected>Combined history</option>
+    <optgroup label="USD">
+      <option value="coinbaseUSD">Coinbase (USD)</option>
+      <option value="bitstampUSD">Bitstamp (USD)</option>
+      <option value="mtgoxUSD">Mt. Gox (USD)</option>
+    </optgroup>
+  </select>
+  <input id="SubmitButton" type="submit" value="Draw"></div>
+ <div class="col"><h6>Time Period</h6>
+  <select id="r">
+   <option value="1">1 day</option><option value="2">2 days</option><option value="5">5 days</option><option value="10">10 days</option>
+   <option value="30">1 month</option><option value="60" selected>2 months</option><option value="90">3 months</option><option value="120">4 months</option>
+   <option value="150">5 months</option><option value="180">6 months</option><option value="360">1 year</option><option value="730">2 years</option>
+   <option value="1460">4 years</option><option value="2920">8 years</option><option value="">All Data</option></select>
+  <select id="i"><option value="">auto</option><option>1-min</option><option>5-min</option><option>15-min</option><option>30-min</option>
+   <option>Hourly</option><option>2-hour</option><option>6-hour</option><option>12-hour</option><option>Daily</option><option>Weekly</option></select><br>
+  <label><input type="checkbox" id="c">Custom Time</label>
+  <div id="CustomTimeBox"><input id="s" type="date"> — <input id="e" type="date"><br>
+   <button type="button" id="Prev">&lt;</button> day <button type="button" id="Next">&gt;</button></div></div>
+ <div class="col"><h6>Chart Type</h6>
+  <select id="t"><option value="">None</option><option value="S" selected>CandleStick</option><option value="C">Closing Price</option>
+   <option value="M">Median Price</option><option value="O">OHLC</option><option value="T">Typical Price</option><option value="W">Weighted Close</option></select>
+  <h6>Price Band</h6>
+  <select id="b"><option value="">None</option><option value="B">Bollinger Band</option><option value="D">Donchian Channel</option><option value="E">Envelop (SMA 20 +/- 10%)</option></select></div>
+ <div class="col"><h6>Moving Averages</h6>
+  <select id="a1"><option value="">None</option><option value="SMA">Simple</option><option value="EMA">Exponential</option><option value="TMA">Triangular</option><option value="WMA">Weighted</option></select>
+  <input id="m1" size="3" value="10"><br>
+  <select id="a2"><option value="">None</option><option value="SMA">Simple</option><option value="EMA">Exponential</option><option value="TMA">Triangular</option><option value="WMA">Weighted</option></select>
+  <input id="m2" size="3" value="25"></div>
+ <div class="col"><h6>Technical Indicators</h6>
+  <label><input type="checkbox" id="x">large indicators</label><br>
+  <select id="i1" class="ind"></select><br><select id="i2" class="ind"></select><br>
+  <select id="i3" class="ind"></select><br><select id="i4" class="ind"></select></div>
+ <div class="col"><h6>Options</h6>
+  <label><input type="checkbox" id="v" checked>Show Volume Bars</label><br>
+  <label><input type="checkbox" id="cv">Volume in Currency</label><br>
+  <label><input type="checkbox" id="l">Log Scale</label><br>
+  <label><input type="checkbox" id="p">Percentage Scale</label></div>
+</form>
+<div id="content_chart" class="wrap">
+ <p class="info"><span id="scaleToggle" class="seg" role="group" aria-label="Price scale"><button type="button" data-l="0">Linear</button><button type="button" data-l="1">Log</button></span> <a href="#" id="getPermalink">Link to this chart</a> · <a href="#" id="larger">Larger chart</a>
+  <span id="legend"></span></p>
+ <div id="permalinkbox" hidden>Use this link to bookmark or share this chart. Select "Custom Time" for a permanent link to a specific date.<br><input id="permalink" readonly></div>
+ <div id="charts"><div id="main"></div><div id="subs"></div></div>
+ <p class="small" id="sourceNote">Daily history cached locally.</p>
+ <a href="#" id="loadRaw">Load raw data</a>
+ <table class="data" id="chart_table" hidden><thead><tr><th>Timestamp</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Volume (BTC)</th><th>Volume (Currency)</th><th>Weighted Price</th></tr></thead><tbody></tbody></table>
+</div>
+<script src="vendor/lightweight-charts.js"></script>
+<script src="indicators.js"></script>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body></html>

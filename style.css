@@ -1,0 +1,22 @@
+body{margin:0;font:12px/1.4 Verdana,Arial,sans-serif;color:#222;background:#fff}
+.wrap{max-width:1180px;margin:0 auto;padding:0 10px}
+#header{background:#1d1d1d;color:#ddd;padding:8px 0}#header .wrap{display:flex;align-items:center;gap:30px}
+#logo{color:#f7931a;font-size:22px;font-weight:bold;text-decoration:none}
+#menu{list-style:none;margin:0;padding:0;display:flex;gap:15px}#menu a{color:#fff;font-weight:bold}
+.timestamp{margin-left:auto;color:#aaa}
+.submenu{padding:8px 10px;border-bottom:1px solid #ddd}.submenu a{font-weight:bold;color:#333}
+#chartoptions{display:flex;gap:14px;padding-top:6px;padding-bottom:8px;border-bottom:1px solid #ddd;background:#f6f6f6}
+.col{flex:1;min-width:0}h6{margin:4px 0;font-size:11px;text-transform:uppercase;color:#555}
+select,input{font-size:11px}select{max-width:130px}
+#CustomTimeBox{display:none}#CustomTimeBox input{width:110px}
+.info{margin:6px 0}#legend{float:right;color:#555}
+#permalink{width:100%}#charts{border:1px solid #ccc}
+#main{height:480px}.sub{height:130px;border-top:1px solid #ccc;position:relative}.sub.big{height:220px}
+.sub .lbl{position:absolute;left:6px;top:2px;z-index:5;font-size:11px;color:#555;background:#fffc}
+.small{color:#777;font-size:10px}
+table.data{border-collapse:collapse;margin-top:6px}table.data td,table.data th{border:1px solid #ddd;padding:2px 6px;text-align:right}
+body.wide #content_chart{max-width:none}
+
+.seg{display:inline-flex;border:1px solid #f7931a;border-radius:4px;overflow:hidden;margin-right:10px;vertical-align:middle}
+.seg button{border:0;background:#fff;color:#b86a00;font:bold 12px Verdana,sans-serif;padding:4px 14px;cursor:pointer}
+.seg button.on{background:#f7931a;color:#fff}
