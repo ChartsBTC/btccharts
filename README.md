@@ -21,3 +21,4 @@ Static bitcoincharts.com-style chart page.
 - Percentile bands: for any ratio panel (Mayer Multiple, Price/MA, Price/Power Law), dashed labeled lines at a user-editable set of percentiles (default 1, 5, 20, 50, 80, 95, 99). Optional price-space bands (percentile × overlay), including the Power Law projection. The current ratio’s percentile rank is shown in the legend and Post to X caption. Hash: `pb`, `pbp`.
 - Blended percentile panel in the Power Law view (`blp`, `blw`): combines each bar’s Price/Power Law and Years Ahead percentile ranks into a 0–100 score (default 50/50 weight, adjustable). Colored green to red, with the same percentile reference lines. Current score and both component ranks appear in the legend, caption, and CSV.
 - 3-hour candles are available in the interval list (aggregated from 1-hour data).
+- Halving-epoch candles (`vtgepoch`): one candle per halving era with an OHLC box and % change label. Yearly candles also show a % change label.

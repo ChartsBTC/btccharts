@@ -134,3 +134,8 @@ body.scout-powerlaw.scout-blend #main{height:280px}
 body.scout-powerlaw.scout-blend .sub.scout-panel{height:150px}
 #blw{vertical-align:middle;width:120px}
 #blwVal{display:inline-block;min-width:2em;text-align:right}
+
+body.scout-epoch #scaleToggle,body.scout-epoch #markerBox,body.scout-epoch #ratioBox,body.scout-epoch #ratioLogBox{display:none}
+body.scout-epoch #main{height:540px}
+.scout-canvas{position:absolute;inset:0}
+body.scout-epoch #chartWatermark{bottom:64px}

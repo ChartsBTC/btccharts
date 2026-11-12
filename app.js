@@ -28,6 +28,7 @@ function syncViewToggle(){
   document.body.classList.toggle('scout-pricema',vt==='pricema' && !on);
   document.body.classList.toggle('scout-osc',vt==='pricema' && ($('pmm')&&$('pmm').value==='osc') && !on);
   document.body.classList.toggle('scout-returns',vt==='returns' && !on);
+  document.body.classList.toggle('scout-epoch',vt==='epoch' && !on);
   document.body.classList.toggle('mode-mult',vt==='returns' && ($('rm')&&$('rm').value==='mult') && !on);
   document.querySelectorAll('#viewToggle button').forEach(b=>b.classList.toggle('on',(b.dataset.cy==='1')===on && !vt));
   if(!vt && !on) document.querySelectorAll('#viewToggle button').forEach(b=>b.classList.toggle('on',(b.dataset.cy==='1')===false));
@@ -287,7 +288,7 @@ function drawPowerLawUplot(u,xs,barAt){
 }
 
 let plSeries={};
-function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if(typeof clearScoutPlots==='function')clearScoutPlots();if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view','scout-view','scout-powerlaw','scout-drawdown','scout-ath','scout-sats','scout-pricema','scout-osc','scout-returns','mode-mult','scout-blend');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null;if($('plLegend')&&!($('pl')&&$('pl').checked)){$('plLegend').hidden=true;$('plLegend').textContent=''}}
+function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if(typeof clearScoutPlots==='function')clearScoutPlots();if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view','scout-view','scout-powerlaw','scout-drawdown','scout-ath','scout-sats','scout-pricema','scout-osc','scout-returns','mode-mult','scout-blend','scout-epoch');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null;if($('plLegend')&&!($('pl')&&$('pl').checked)){$('plLegend').hidden=true;$('plLegend').textContent=''}}
 
 async function draw(pushUrl){
   const hash=buildHash();
@@ -612,6 +613,29 @@ function render(interval, marks){
   charts.forEach(c=>c.priceScale('right').applyOptions({minimumWidth:80}));
   charts.forEach(c=>c.timeScale().subscribeVisibleLogicalRangeChange(r=>{if(syncing||!r)return;syncing=true;charts.forEach(o=>o!==c&&o.timeScale().setVisibleLogicalRange(r));syncing=false}));
   main.timeScale().fitContent();setTimeout(()=>main.timeScale().fitContent(),50);
+  if(interval==='Yearly' && mainSeries && (t==='S'||t==='O') && typeof attachChartOverlay==='function'){
+    attachChartOverlay(main,(ctx,chart,w,h)=>{
+      ctx.save();
+      ctx.font='bold 11px Verdana,Arial,sans-serif';
+      ctx.textAlign='center';
+      for(const b of bars){
+        if(!(b.open>0)) continue;
+        const x=chart.timeScale().timeToCoordinate(b.time);
+        if(x==null) continue;
+        const pct=(b.close/b.open-1)*100;
+        const up=pct>=0;
+        const yRaw=mainSeries.priceToCoordinate(up?b.high:b.low);
+        if(yRaw==null) continue;
+        const label=Math.round(pct)+'%';
+        ctx.textBaseline=up?'bottom':'top';
+        const y=up?yRaw-6:yRaw+6;
+        ctx.lineWidth=3; ctx.strokeStyle='rgba(255,255,255,0.85)'; ctx.strokeText(label,x,y);
+        ctx.fillStyle=up?'#1b5e20':'#b71c1c';
+        ctx.fillText(label,x,y);
+      }
+      ctx.restore();
+    });
+  }
   if(($('pl')&&$('pl').checked)||($('rp')&&$('rp').value==='pl')){let _plT;const refit=()=>{clearTimeout(_plT);_plT=setTimeout(()=>applyPowerLawLW(main),80)};main.timeScale().subscribeVisibleLogicalRangeChange(refit);setTimeout(()=>applyPowerLawLW(main),80)} else setPlLegend(null);
   main.subscribeCrosshairMove(p=>{const bar=p.time&&bars.find(x=>x.time===p.time);
     if(!bar){$('legend').textContent=(typeof ratioRankText==='function'&&window.lastRatio)?ratioRankText(window.lastRatio):'';return}
@@ -639,7 +663,7 @@ function clear_table(){
   if($('loadRaw')) $('loadRaw').textContent='Show data';
 }
 function showTable(){
-  if($('cy').checked) fillCycleTable(); else if(typeof scoutView==='function'&&scoutView()==='powerlaw') fillPowerLawTable(); else if(scoutView()==='drawdown') fillDrawdownTable(); else if(scoutView()==='ath') fillAthTable(); else if(scoutView()==='sats') fillSatsTable(); else if(scoutView()==='pricema') fillPriceMaTable(); else if(scoutView()==='returns') fillReturnsTable(); else fillPriceTable();
+  if($('cy').checked) fillCycleTable(); else if(typeof scoutView==='function'&&scoutView()==='powerlaw') fillPowerLawTable(); else if(scoutView()==='drawdown') fillDrawdownTable(); else if(scoutView()==='ath') fillAthTable(); else if(scoutView()==='sats') fillSatsTable(); else if(scoutView()==='pricema') fillPriceMaTable(); else if(scoutView()==='returns') fillReturnsTable(); else if(scoutView()==='epoch') fillEpochTable(); else fillPriceTable();
   tableOpen=true;
   $('tableWrap').hidden=false;
   $('downloadCsv').hidden=false;
@@ -688,6 +712,17 @@ function fillCycleTable(){
     }
   }
   $('chart_table').tBodies[0].innerHTML=parts.join('');
+}
+function fillEpochTable(){
+  const cs=window.lastScout&&window.lastScout.candles, head=['Epoch','Start','End','Open','High','Low','Close','Change %'];
+  setTableHead(head); tableCsv=[head.slice()];
+  const rows=[];
+  for(const c of (cs||[])){
+    const rec=[String(c.epoch),isoUTC(c.start),isoUTC(c.end),String(c.open),String(c.high),String(c.low),String(c.close),c.pct!=null?c.pct.toFixed(2):''];
+    tableCsv.push(rec);
+    rows.push('<tr>'+rec.map(v=>'<td>'+v+'</td>').join('')+'</tr>');
+  }
+  $('chart_table').tBodies[0].innerHTML=rows.join('');
 }
 function fillReturnsTable(){
   const s=window.lastScout||{}, mode=s.mode||'cagr', col=mode==='cagr'?'CAGR %':mode==='roi'?'ROI %':'1-year multiple';
@@ -799,9 +834,12 @@ function isMobileUa(){
 }
 function chartTitleLine(){
   const vt=($('vt')&&$('vt').value)||'';
-  if(vt==='powerlaw'||vt==='drawdown'||vt==='ath'||vt==='sats'||vt==='pricema'||vt==='returns'){
+  if(vt==='powerlaw'||vt==='drawdown'||vt==='ath'||vt==='sats'||vt==='pricema'||vt==='returns'||vt==='epoch'){
     const m=currentMarket();
     const name=m==='combinedUSD'?'BTC/USD Combined':('BTC/USD '+marketLabel(m).replace(/ \(USD\)/,''));
+    if(vt==='epoch'){
+      return name+' · Halving-epoch candles';
+    }
     if(vt==='returns'){
       const mode=($('rm')&&$('rm').value)||'cagr';
       const n=mode==='mult'?1:(parseInt($('rn')&&$('rn').value)||4);
@@ -1088,6 +1126,15 @@ function shareCaption(){
     if(c&&c.last) bits.push(typeof ratioRankText==='function'?ratioRankText(c):(c.title+' '+formatRatioValue(c.last.value)));
     if(pct&&pct.length) bits.push('percentiles 20/40/60/80 = '+pct.map(v=>formatRatioValue(v)).join(', '));
     if(bars.length) bits.push('Last $'+Number(bars.at(-1).close).toLocaleString('en-US',{maximumFractionDigits:0})+' on '+isoUTC(bars.at(-1).time));
+    return bits.join('. ')+'.';
+  }
+  if(vt==='epoch'){
+    bits.push('Bitcoin halving-epoch candles (one candle per era)');
+    const cs=window.lastScout&&window.lastScout.candles;
+    if(cs&&cs.length){
+      const last=cs.at(-1);
+      bits.push(cs.length+' epochs, current era '+isoUTC(last.start)+' to '+isoUTC(last.end)+' '+(last.pct!=null?Math.round(last.pct)+'%':'')+' close '+formatUsdBox(last.close));
+    }
     return bits.join('. ')+'.';
   }
   if(vt==='returns'){
