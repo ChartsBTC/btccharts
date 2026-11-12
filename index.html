@@ -59,6 +59,11 @@
  <p class="info">
   <span id="scaleToggle" class="seg" role="group" aria-label="Price scale"><button type="button" data-l="0">Linear</button><button type="button" data-l="1">Log</button></span>
   <span id="viewToggle" class="seg" role="group" aria-label="View"><button type="button" data-cy="0">Price</button><button type="button" data-cy="1">Cycles</button></span>
+  <span id="markerBox" class="price-only">
+    <label><input type="checkbox" id="ch">Cycle highs</label>
+    <label><input type="checkbox" id="cl">Cycle lows</label>
+    <label><input type="checkbox" id="hv">Halvings</label>
+  </span>
   <label id="cycleAlignBox" class="cycle-only">Align
     <select id="ca">
       <option value="low" selected>By cycle low</option>

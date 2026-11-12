@@ -64,3 +64,7 @@ body.cycles-view #charts.has-volume #chartWatermark{bottom:38px}
 #tableWrap{max-height:420px;overflow:auto;margin:6px 0 12px;border:1px solid #ddd}
 #tableWrap table.data{margin-top:0;width:100%}
 #tableWrap thead th{position:sticky;top:0;background:#f6f6f6;z-index:1}
+
+#markerBox{display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-weight:bold;color:#333}
+#markerBox label{display:inline-flex;align-items:center;gap:4px;font-weight:normal;cursor:pointer}
+body.cycles-view #markerBox{display:none}

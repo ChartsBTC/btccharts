@@ -1,6 +1,6 @@
 const $=id=>document.getElementById(id);
 const LW=LightweightCharts;
-const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','cy','ca','cp'];
+const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','cy','ca','cp','ch','cl','hv'];
 // populate indicator selects (only implemented ones, original naming)
 document.querySelectorAll('select.ind').forEach(s=>{s.innerHTML='<option value="">None</option>'+Object.entries(INDICATORS).map(([k,v])=>`<option value="${k}">${v.label.replace(/ \(.*/,'')}</option>`).join('')});
 
@@ -44,6 +44,46 @@ async function resolveCyclePreset(code){
   return {start,end,cycle:c};
 }
 
+
+function nearestBar(t){
+  if(!bars.length) return null;
+  let best=bars[0], bd=Math.abs(bars[0].time-t);
+  for(const b of bars){const d=Math.abs(b.time-t); if(d<bd){bd=d;best=b}}
+  return best;
+}
+async function priceEventMarkers(){
+  const marks=[];
+  if(!bars.length||!($('ch')&&($('ch').checked||$('cl').checked||$('hv').checked))) return marks;
+  const t0=bars[0].time, t1=bars.at(-1).time;
+  const seen=new Set();
+  const add=(t,m)=>{const b=nearestBar(t); if(!b) return; if(seen.has(b.time+'|'+m.text)) return; seen.add(b.time+'|'+m.text); marks.push({...m,time:b.time})}
+  if($('ch').checked||$('cl').checked){
+    const cycles=await loadDetectedCycles();
+    for(const c of cycles){
+      if($('ch').checked && c.high.time>=t0 && c.high.time<=t1){
+        add(c.high.time,{position:'aboveBar',color:'#2e7d32',shape:'arrowDown',text:'H '+c.high.date+' $'+usd(c.high.price)});
+      }
+      if($('cl').checked){
+        const lows=[{...c.startLow,soFar:false}];
+        if(c.endLow && c.endLow.time!==c.startLow.time) lows.push({...c.endLow,soFar:!!c.lowSoFar});
+        for(const lo of lows){
+          if(lo.time<t0||lo.time>t1) continue;
+          add(lo.time,{position:'belowBar',color:'#c62828',shape:'arrowUp',text:(lo.soFar?'L so far ':'L ')+lo.date+' $'+usd(lo.price)});
+        }
+      }
+    }
+  }
+  if($('hv').checked){
+    for(const h of HALVINGS){
+      if(h.time<t0-40*86400||h.time>t1+40*86400) continue;
+      const b=nearestBar(h.time);
+      if(!b||Math.abs(b.time-h.time)>40*86400) continue;
+      add(h.time,{position:'aboveBar',color:'#6a1b9a',shape:'circle',text:'Halving '+h.label+' $'+usd(b.close)});
+    }
+  }
+  return marks;
+}
+
 // ---- charts ----
 let charts=[],bars=[],syncing=false;
 function mkChart(el,opts={}){return LW.createChart(el,{autoSize:true,layout:{background:{color:'#fff'},textColor:'#333',fontSize:11},
@@ -75,7 +115,8 @@ async function draw(pushUrl){
   status(`${bars.length} ${interval} bars · ${marketLabel(m)} · last ${bars.at(-1).close.toFixed(2)} USD`+(bars._note||''));
   const note=$('sourceNote');
   if(note) note.textContent=(m==='combinedUSD'?SPLICE+' ':'')+'Daily history cached locally. Fine intervals for Coinbase/Bitstamp are fetched live.';
-  render(interval);if(tableOpen)showTable();else clear_table();
+  const marks=await priceEventMarkers();
+  render(interval,marks);if(tableOpen)showTable();else clear_table();
 }
 let cycleSeries=[];
 async function drawCycles(){
@@ -219,7 +260,7 @@ function renderCycles(align, mode){
 // compact price labels for log scale: 1k, 10k, 100k, 2.5k ...
 function compact(v){const a=Math.abs(v);if(a>=1e6)return +(v/1e6).toPrecision(3)+'M';if(a>=1e3)return +(v/1e3).toPrecision(3)+'k';return +v.toPrecision(3)+''}
 function syncScaleToggle(){document.querySelectorAll('#scaleToggle button').forEach(b=>b.classList.toggle('on',(b.dataset.l==='1')===$('l').checked))}
-function render(interval){
+function render(interval, marks){
   clearCharts();syncScaleToggle();
   $('charts').classList.toggle('has-volume',!!$('v').checked);
   const isLog=$('l').checked&&!$('p').checked;
@@ -229,11 +270,13 @@ function render(interval){
     scaleMargins:{top:.05,bottom:$('v').checked?.22:.05}});
   const O=bars.map(b=>b.open),H=bars.map(b=>b.high),L=bars.map(b=>b.low),C=bars.map(b=>b.close);
   const t=$('t').value;
-  if(t==='S'){main.addCandlestickSeries({upColor:'#26a69a',downColor:'#ef5350',borderVisible:false,wickUpColor:'#26a69a',wickDownColor:'#ef5350'}).setData(bars)}
-  else if(t==='O'){main.addBarSeries({upColor:'#26a69a',downColor:'#ef5350',thinBars:false}).setData(bars)}
+  let mainSeries=null;
+  if(t==='S'){mainSeries=main.addCandlestickSeries({upColor:'#26a69a',downColor:'#ef5350',borderVisible:false,wickUpColor:'#26a69a',wickDownColor:'#ef5350'});mainSeries.setData(bars)}
+  else if(t==='O'){mainSeries=main.addBarSeries({upColor:'#26a69a',downColor:'#ef5350',thinBars:false});mainSeries.setData(bars)}
   else if(t){const f={C:i=>C[i],M:i=>(H[i]+L[i])/2,T:i=>(H[i]+L[i]+C[i])/3,W:i=>(H[i]+L[i]+2*C[i])/4}[t];
-    main.addLineSeries({color:'#1a237e',lineWidth:2}).setData(ser(bars.map((_,i)=>f(i))))}
-  else main.addLineSeries({visible:false}).setData(ser(C)); // keep scale with "None"
+    mainSeries=main.addLineSeries({color:'#1a237e',lineWidth:2});mainSeries.setData(ser(bars.map((_,i)=>f(i))))}
+  else {mainSeries=main.addLineSeries({visible:false});mainSeries.setData(ser(C))} // keep scale with "None"
+  if(mainSeries&&marks&&marks.length) mainSeries.setMarkers(marks);
   const line=(arr,color,w=1,style=0)=>main.addLineSeries({color,lineWidth:w,lineStyle:style,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false}).setData(ser(arr));
   // price band
   const b=$('b').value;
@@ -511,6 +554,7 @@ document.querySelectorAll('#viewToggle button').forEach(b=>b.onclick=()=>{const 
 $('chartoptions').addEventListener('change',e=>{if(e.target.id==='c'){if($('c').checked)setCustomDefaults();else{$('s').value=$('e').value=''}syncCustom()}
   if(e.target.id==='r'){$('c').checked=false;$('s').value=$('e').value='';syncCustom()}draw(1)});
 $('ca').addEventListener('change',()=>draw(1));
+['ch','cl','hv'].forEach(id=>$(id)&&$(id).addEventListener('change',()=>draw(1)));
 $('cp').addEventListener('change',()=>draw(1));
 $('SubmitButton').onclick=()=>draw(1);
 const shift=d=>{if(!$('c').checked){$('c').checked=true;setCustomDefaults();syncCustom()}
