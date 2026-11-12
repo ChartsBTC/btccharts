@@ -89,3 +89,12 @@ body.cycles-view #epochLegend{display:none}
 #ratioBox select{max-width:160px;margin-left:4px}
 body.cycles-view #ratioBox,body.cycles-view #ratioLogBox{display:none}
 .sub.scout-ratio{height:180px}
+
+#scoutViewBox{display:inline-flex;align-items:center;gap:6px;font-weight:bold;color:#333}
+#scoutViewBox select{font-size:12px;max-width:200px}
+body.cycles-view #scoutViewBox{display:none}
+body.scout-view #markerBox,body.scout-view #ratioBox,body.scout-view #ratioLogBox{display:none}
+body.scout-powerlaw #scaleToggle{display:none}
+body.scout-powerlaw #main{height:340px}
+body.scout-powerlaw .sub.scout-panel{height:170px}
+body.scout-view #charts{overflow:visible}

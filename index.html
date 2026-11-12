@@ -85,6 +85,12 @@
  <div class="info">
   <span id="scaleToggle" class="seg" role="group" aria-label="Price scale"><button type="button" data-scale="linear">Linear</button><button type="button" data-scale="log">Log</button><button type="button" data-scale="loglog">Log-Log</button></span>
   <span id="viewToggle" class="seg" role="group" aria-label="View"><button type="button" data-cy="0">Price</button><button type="button" data-cy="1">Cycles</button></span>
+  <label id="scoutViewBox">View
+    <select id="vt">
+      <option value="" selected>Price chart</option>
+      <option value="powerlaw">Power Law</option>
+    </select>
+  </label>
   <span id="markerBox" class="price-only">
     <label><input type="checkbox" id="ch">Cycle highs</label>
     <label><input type="checkbox" id="cl">Cycle lows</label>

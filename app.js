@@ -1,6 +1,6 @@
 const $=id=>document.getElementById(id);
 const LW=LightweightCharts;
-const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','cy','ca','cp','ch','cl','hv','ll','pl','ep','rp','rpl'];
+const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','cy','ca','cp','ch','cl','hv','ll','pl','ep','rp','rpl','vt'];
 // populate indicator selects (only implemented ones, original naming)
 document.querySelectorAll('select.ind').forEach(s=>{s.innerHTML='<option value="">None</option>'+Object.entries(INDICATORS).map(([k,v])=>`<option value="${k}">${v.label.replace(/ \(.*/,'')}</option>`).join('')});
 
@@ -16,9 +16,14 @@ function parseHash(hash){ if(!hash)return;
     if(e.type==='checkbox')e.checked=true;else e.value=unescape(part.slice(id.length+1))}}
 function syncCustom(){ $('CustomTimeBox').style.display=$('c').checked?'block':'none'; $('r').style.display=$('c').checked?'none':'';}
 function syncViewToggle(){
+  const vt=($('vt')&&$('vt').value)||'';
+  if(vt && $('cy').checked) $('cy').checked=false;
   const on=$('cy').checked;
   document.body.classList.toggle('cycles-view',on);
-  document.querySelectorAll('#viewToggle button').forEach(b=>b.classList.toggle('on',(b.dataset.cy==='1')===on));
+  document.body.classList.toggle('scout-view',!!vt && !on);
+  document.body.classList.toggle('scout-powerlaw',vt==='powerlaw' && !on);
+  document.querySelectorAll('#viewToggle button').forEach(b=>b.classList.toggle('on',(b.dataset.cy==='1')===on && !vt));
+  if(!vt && !on) document.querySelectorAll('#viewToggle button').forEach(b=>b.classList.toggle('on',(b.dataset.cy==='1')===false));
   $('main').classList.toggle('cycles',on);
 }
 function fmtD(d){return d.toISOString().slice(0,10)}
@@ -266,7 +271,7 @@ function drawPowerLawUplot(u,xs,barAt){
 }
 
 let plSeries={};
-function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null}
+function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if(typeof clearScoutPlots==='function')clearScoutPlots();if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view','scout-view','scout-powerlaw');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null}
 
 async function draw(pushUrl){
   const hash=buildHash();
@@ -291,6 +296,9 @@ async function draw(pushUrl){
   status(`${bars.length} ${interval} bars · ${marketLabel(m)} · last ${bars.at(-1).close.toFixed(2)} USD`+(bars._note||''));
   const note=$('sourceNote');
   if(note) note.textContent=(m==='combinedUSD'?SPLICE+' ':'')+'Daily history cached locally. Fine intervals for Coinbase/Bitstamp are fetched live.';
+  if(typeof scoutView==='function'&&scoutView()){
+    if(renderScout(scoutView())){if(tableOpen)showTable();else clear_table();return}
+  }
   const marks=await priceEventMarkers();
   render(interval,marks);if(tableOpen)showTable();else clear_table();
 }
@@ -602,7 +610,7 @@ function clear_table(){
   if($('loadRaw')) $('loadRaw').textContent='Show data';
 }
 function showTable(){
-  if($('cy').checked) fillCycleTable(); else fillPriceTable();
+  if($('cy').checked) fillCycleTable(); else if(typeof scoutView==='function'&&scoutView()==='powerlaw') fillPowerLawTable(); else fillPriceTable();
   tableOpen=true;
   $('tableWrap').hidden=false;
   $('downloadCsv').hidden=false;
@@ -647,6 +655,22 @@ function fillCycleTable(){
   }
   $('chart_table').tBodies[0].innerHTML=parts.join('');
 }
+function fillPowerLawTable(){
+  const fit=window.lastPowerFit, head=['Date','Close','Power Law','Price / Power Law','Years Ahead'];
+  setTableHead(head); tableCsv=[head.slice()];
+  const rows=[];
+  for(const b of (bars||[]).slice().reverse()){
+    if(!(b.close>0)) continue;
+    const d=daysSinceGenesis(b.time);
+    const pl=fit&&d>0?powerLawPrice(d,fit.a,fit.b):null;
+    const ratio=pl>0?b.close/pl:null;
+    const ahead=(fit&&d>0)?yearsAheadOfPowerLaw(d,b.close,fit):null;
+    const rec=[isoUTC(b.time),String(b.close),pl!=null?String(+pl.toPrecision(6)):'',ratio!=null?formatRatioValue(ratio):'',ahead!=null?ahead.toFixed(3):''];
+    tableCsv.push(rec);
+    rows.push('<tr>'+rec.map(c=>'<td>'+c+'</td>').join('')+'</tr>');
+  }
+  $('chart_table').tBodies[0].innerHTML=rows.join('');
+}
 function csvEscape(v){const s=String(v??'');return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}
 function downloadCsv(e){
   if(e)e.preventDefault();
@@ -664,6 +688,12 @@ function isMobileUa(){
   return isLikelyIOS()||/Mobi|Android/i.test(navigator.userAgent);
 }
 function chartTitleLine(){
+  const vt=($('vt')&&$('vt').value)||'';
+  if(vt==='powerlaw'){
+    const m=currentMarket();
+    const name=m==='combinedUSD'?'BTC/USD Combined':('BTC/USD '+marketLabel(m).replace(/ \(USD\)/,''));
+    return name+' · '+(($('i').value)||'Daily')+' · Power Law';
+  }
   const scale=($('ll')&&$('ll').checked)?'Log-Log':($('p').checked?'Percentage':($('l').checked?'Log':'Linear'));
   if($('cy').checked){
     const align={low:'low',high:'high',halving:'halving date',calendar:'4-year calendar'}[$('ca').value]||$('ca').value;
@@ -732,6 +762,10 @@ function waitPaint(){
 }
 async function composeChartImage(){
   await waitPaint();
+  if(typeof composeScoutImage==='function'){
+    const scout=await composeScoutImage();
+    if(scout) return scout;
+  }
   if(uplot){
     const cv=uplot.ctx.canvas;
     const cssW=uplot.width||cv.clientWidth||cv.width;
@@ -876,6 +910,23 @@ function currentPermalink(){
 }
 function shareCaption(){
   const bits=[];
+  const vt=($('vt')&&$('vt').value)||'';
+  if(vt==='powerlaw'){
+    bits.push('BTC/USD combined history, power law fit');
+    if(window.lastPowerFit){
+      const f=window.lastPowerFit;
+      bits.push((typeof powerLawEquation==='function'?powerLawEquation(f):'')+', R²='+f.r2.toFixed(3));
+    }
+    if(window.lastRatio&&window.lastRatio.last) bits.push('Price/Power Law '+formatRatioValue(window.lastRatio.last.value));
+    if(bars.length){
+      const last=bars.at(-1);
+      bits.push('Last $'+Number(last.close).toLocaleString('en-US',{maximumFractionDigits:0})+' on '+isoUTC(last.time));
+      const d=daysSinceGenesis(last.time);
+      const ya=window.lastPowerFit?yearsAheadOfPowerLaw(d,last.close,window.lastPowerFit):null;
+      if(ya!=null) bits.push('Years ahead '+(ya>=0?'+':'')+ya.toFixed(2));
+    }
+    return bits.join('. ')+'.';
+  }
   if($('cy')&&$('cy').checked){
     const align={low:'cycle low',high:'cycle high',halving:'halving date',calendar:'4-year calendar'}[$('ca').value]||$('ca').value;
     const mode={usd:'stacked USD',low:'multiple of cycle low',high:'% of cycle high',day0:'relative to day 0'}[$('cp').value]||$('cp').value;
@@ -980,7 +1031,10 @@ document.querySelectorAll('#scaleToggle button').forEach(b=>b.onclick=()=>{
   else {$('ll').checked=false;$('l').checked=false;$('p').checked=false}
   draw(1)});
 document.querySelectorAll('#viewToggle button').forEach(b=>b.onclick=()=>{const want=b.dataset.cy==='1';
-  if($('cy').checked===want)return;$('cy').checked=want;if(want)$('p').checked=false;draw(1)});
+  if($('vt')) $('vt').value='';
+  if($('cy').checked===want && !want){draw(1);return}
+  $('cy').checked=want;if(want)$('p').checked=false;draw(1)});
+$('vt')&&$('vt').addEventListener('change',()=>{if($('vt').value)$('cy').checked=false;draw(1)});
 $('chartoptions').addEventListener('change',e=>{if(e.target.id==='c'){if($('c').checked)setCustomDefaults();else{$('s').value=$('e').value=''}syncCustom()}
   if(e.target.id==='r'){$('c').checked=false;$('s').value=$('e').value='';syncCustom()}draw(1)});
 $('ca').addEventListener('change',()=>draw(1));
