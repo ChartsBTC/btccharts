@@ -25,6 +25,25 @@ function fmtD(d){return d.toISOString().slice(0,10)}
 function setCustomDefaults(){const d=parseInt($('r').value)||29;const now=new Date();
   if(!$('s').value)$('s').value=fmtD(new Date(now-(d-1)*864e5));if(!$('e').value)$('e').value=fmtD(new Date(+now+864e5));}
 
+
+function isCyclePreset(v){return typeof v==='string'&&/^c(\d{4}|current)$/.test(v)}
+let cyclePresetCache=null, cyclePresetAsOf=0;
+async function loadDetectedCycles(){
+  const raw=await getDaily('combinedUSD');
+  const last=raw.length?raw[raw.length-1][0]:0;
+  if(cyclePresetCache&&cyclePresetAsOf===last) return cyclePresetCache;
+  cyclePresetAsOf=last;
+  return cyclePresetCache=detectCycles(raw.map(toBar));
+}
+async function resolveCyclePreset(code){
+  const cycles=await loadDetectedCycles();
+  const c=code==='ccurrent'?(cycles.find(x=>x.open)||cycles.at(-1)):cycles.find(x=>x.year===+code.slice(1));
+  if(!c) throw new Error('Unknown cycle preset: '+code);
+  const start=c.startLow.time;
+  const end=c.open?Math.floor(Date.now()/1000):(c.endLow.time+86400);
+  return {start,end,cycle:c};
+}
+
 // ---- charts ----
 let charts=[],bars=[],syncing=false;
 function mkChart(el,opts={}){return LW.createChart(el,{autoSize:true,layout:{background:{color:'#fff'},textColor:'#333',fontSize:11},
@@ -41,7 +60,10 @@ async function draw(pushUrl){
   if($('cy').checked){await drawCycles();return}
   // time window
   const now=Math.floor(Date.now()/1000);let start,end=now,days;
-  if($('c').checked){start=Date.parse($('s').value)/1000;end=Math.min(now,Date.parse($('e').value)/1000||now);days=(end-start)/86400}
+  if(isCyclePreset($('r').value)){
+    try{const range=await resolveCyclePreset($('r').value);start=range.start;end=range.end;days=(end-start)/86400}
+    catch(e){status('Error: '+e.message);return}
+  }else if($('c').checked){start=Date.parse($('s').value)/1000;end=Math.min(now,Date.parse($('e').value)/1000||now);days=(end-start)/86400}
   else if($('r').value){days=+$('r').value;start=now-days*86400}
   else {days=99999;start=0;} // All Data: from the selected market's first cached bar
   const interval=$('i').value||autoInterval(days);
@@ -487,7 +509,7 @@ document.querySelectorAll('#scaleToggle button').forEach(b=>b.onclick=()=>{const
 document.querySelectorAll('#viewToggle button').forEach(b=>b.onclick=()=>{const want=b.dataset.cy==='1';
   if($('cy').checked===want)return;$('cy').checked=want;if(want)$('p').checked=false;draw(1)});
 $('chartoptions').addEventListener('change',e=>{if(e.target.id==='c'){if($('c').checked)setCustomDefaults();else{$('s').value=$('e').value=''}syncCustom()}
-  if(e.target.id==='r')$('c').checked=false,syncCustom();draw(1)});
+  if(e.target.id==='r'){$('c').checked=false;$('s').value=$('e').value='';syncCustom()}draw(1)});
 $('ca').addEventListener('change',()=>draw(1));
 $('cp').addEventListener('change',()=>draw(1));
 $('SubmitButton').onclick=()=>draw(1);
