@@ -274,7 +274,7 @@ function drawPowerLawUplot(u,xs,barAt){
 }
 
 let plSeries={};
-function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if(typeof clearScoutPlots==='function')clearScoutPlots();if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view','scout-view','scout-powerlaw','scout-drawdown','scout-ath','scout-sats');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null}
+function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if(typeof clearScoutPlots==='function')clearScoutPlots();if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view','scout-view','scout-powerlaw','scout-drawdown','scout-ath','scout-sats');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null;if($('plLegend')&&!($('pl')&&$('pl').checked)){$('plLegend').hidden=true;$('plLegend').textContent=''}}
 
 async function draw(pushUrl){
   const hash=buildHash();
@@ -966,7 +966,7 @@ function shareCaption(){
       bits.push('Last $'+Number(last.close).toLocaleString('en-US',{maximumFractionDigits:0})+' on '+isoUTC(last.time));
       const d=daysSinceGenesis(last.time);
       const ya=window.lastPowerFit?yearsAheadOfPowerLaw(d,last.close,window.lastPowerFit):null;
-      if(ya!=null) bits.push('Years ahead '+(ya>=0?'+':'')+ya.toFixed(2));
+      if(ya!=null) bits.push('Years ahead '+(typeof formatYearsMonths==='function'?formatYearsMonths(ya):(ya>=0?'+':'')+ya.toFixed(2)));
     }
     return bits.join('. ')+'.';
   }

@@ -242,9 +242,22 @@ let scoutPlots=[];
 const YEAR_2030=(Date.UTC(2030,11,31)/1000);
 function daysTo2030(){return (YEAR_2030-GENESIS)/86400}
 function yearsAheadOfPowerLaw(d,price,fit){
+  // Closed-form inversion of the shown fit: days* = 10^((log10(price)-a)/b).
+  // Positive = price ahead of the power law; negative = behind/below it.
   if(!(d>0)||!(price>0)||!fit||!fit.b) return null;
   const dStar=Math.pow(10,(Math.log10(price)-fit.a)/fit.b);
   return (dStar-d)/365.25;
+}
+function formatYearsMonths(years){
+  if(years==null||!isFinite(years)) return '';
+  const neg=years<0;
+  const abs=Math.abs(years);
+  let y=Math.floor(abs+1e-9);
+  let mo=Math.round((abs-y)*12);
+  if(mo===12){y+=1;mo=0}
+  const sign=neg?'-':(years>0?'+':'');
+  if(y===0&&mo===0) return '0 y 0 mo';
+  return sign+y+' y '+mo+' mo';
 }
 function powerLawEquation(fit){
   if(!fit) return '';
@@ -357,7 +370,6 @@ function renderPowerLawView(){
   $('charts').classList.remove('has-volume');
   const sample=bars.filter(b=>b&&b.close>0);
   const fit=fitPowerLaw(sample);
-  setPlLegend(fit);
   const ratio=computeRatio(bars,'pl');
   if(!fit){status('Not enough data for a power law fit.');return}
   const xs=[],ys=[],ratioY=[],aheadY=[],barAt=[];
@@ -373,6 +385,14 @@ function renderPowerLawView(){
   const xMin=xs[0]*0.92, xMax=Math.max(xs[xs.length-1],daysTo2030());
   const eq=powerLawEquation(fit);
   window.lastPowerFit=fit;
+  const yaNow=aheadY.at(-1);
+  window.lastYearsAhead=yaNow;
+  const yaText=formatYearsMonths(yaNow);
+  const el=$('plLegend');
+  if(el){
+    el.hidden=false;
+    el.textContent=powerLawLegendText(fit)+'   ·   Years ahead  '+yaText;
+  }
 
   const main=$('main');
   main.innerHTML='';
@@ -456,7 +476,19 @@ function renderPowerLawView(){
   });
   makeScoutUplot(aHost,xs,aheadY,{
     xMin,xMax,xLabels:true,yLinear:true,stroke:'#1565c0',title:'Years Ahead of Power Law',
-    onDraw:(u,pr)=>drawHLine(u,pr,0,'#e53935'),
+    onDraw:(u,pr)=>{
+      drawHLine(u,pr,0,'#e53935');
+      if(yaText){
+        const ctx=u.ctx;
+        ctx.save();
+        ctx.font='bold '+(11*pr)+'px Verdana,Arial,sans-serif';
+        ctx.fillStyle='#333';
+        ctx.textAlign='left';
+        ctx.textBaseline='top';
+        ctx.fillText('Currently '+yaText, u.bbox.left+8*pr, u.bbox.top+6*pr);
+        ctx.restore();
+      }
+    },
     yFormat:v=> (v>=0?'+':'')+v.toFixed(1),
   });
 
@@ -474,7 +506,7 @@ function renderPowerLawView(){
     const b=barAt[i], d=xs[i];
     const bits=[isoUTC(b.time),'day '+d.toFixed(0),'$'+usd(b.close)];
     if(ratioY[i]!=null) bits.push('Price/PL '+formatRatioValue(ratioY[i]));
-    if(aheadY[i]!=null) bits.push('Years ahead '+(aheadY[i]>=0?'+':'')+aheadY[i].toFixed(2));
+    if(aheadY[i]!=null) bits.push('Years ahead '+formatYearsMonths(aheadY[i]));
     $('legend').textContent=bits.join('  ·  ');
   };
   scoutPlots.forEach(u=>u.setCursor&&null);
@@ -482,7 +514,7 @@ function renderPowerLawView(){
   // Listen on mousemove of each root.
   scoutPlots.forEach(u=>{
     u.root.addEventListener('mousemove',()=>setLeg(u));
-    u.root.addEventListener('mouseleave',()=>{$('legend').textContent=''});
+    u.root.addEventListener('mouseleave',()=>{$('legend').textContent=yaText?'Years ahead  '+yaText:''});
   });
 }
 
@@ -530,6 +562,7 @@ window.renderScout=renderScout;
 window.clearScoutPlots=clearScoutPlots;
 window.composeScoutImage=composeScoutImage;
 window.yearsAheadOfPowerLaw=yearsAheadOfPowerLaw;
+window.formatYearsMonths=formatYearsMonths;
 window.powerLawEquation=powerLawEquation;
 
 
