@@ -66,9 +66,50 @@ function aggregate(rows,sec,offset=0){
     else{cur[2]=Math.max(cur[2],r[2]);cur[3]=Math.min(cur[3],r[3]);cur[4]=r[4];cur[5]+=r[5]}}
   cur&&out.push(cur);return out;
 }
-function autoInterval(days){if(days<=1)return'5-min';if(days<=2)return'15-min';if(days<=5)return'Hourly';if(days<=10)return'2-hour';if(days<=30)return'6-hour';if(days<=1460)return'Daily';return'Weekly'}
+
+function startOfMonthUTC(t){const d=new Date(t*1000);return Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),1)/1000}
+function startOfQuarterUTC(t){const d=new Date(t*1000);return Date.UTC(d.getUTCFullYear(),Math.floor(d.getUTCMonth()/3)*3,1)/1000}
+function startOfYearUTC(t){const d=new Date(t*1000);return Date.UTC(d.getUTCFullYear(),0,1)/1000}
+const CAL_BUCKET={Monthly:startOfMonthUTC,Quarterly:startOfQuarterUTC,Yearly:startOfYearUTC};
+function aggregateCalendar(rows,bucket){
+  const out=[];let cur=null;
+  for(const r of rows){
+    const b=bucket(r[0]);
+    if(!cur||cur[0]!==b){cur&&out.push(cur);cur=[b,r[1],r[2],r[3],r[4],r[5]]}
+    else{cur[2]=Math.max(cur[2],r[2]);cur[3]=Math.min(cur[3],r[3]);cur[4]=r[4];cur[5]+=r[5]}
+  }
+  cur&&out.push(cur);return out;
+}
+function barsFromCycles(daily,start,end){
+  const cycles=detectCycles(daily);
+  const now=Math.floor(Date.now()/1000);
+  const out=[];
+  for(const c of cycles){
+    const t0=c.startLow.time, t1=c.open?now:(c.endLow?c.endLow.time:now);
+    if(t1<start||t0>=end) continue;
+    const slice=daily.filter(b=>b.time>=t0&&b.time<=t1);
+    if(!slice.length) continue;
+    out.push({
+      time:t0, open:slice[0].open,
+      high:Math.max(...slice.map(b=>b.high)),
+      low:Math.min(...slice.map(b=>b.low)),
+      close:slice.at(-1).close,
+      volume:slice.reduce((s,b)=>s+b.volume,0),
+    });
+  }
+  return out;
+}
+function autoInterval(days){if(days<=1)return'5-min';if(days<=2)return'15-min';if(days<=5)return'Hourly';if(days<=10)return'2-hour';if(days<=30)return'6-hour';if(days<=1460)return'Daily';if(days<=2920)return'Weekly';return'Monthly'}
 async function loadBars(interval,start,end,onProgress){
   const market=currentMarket();
+  if(interval==='Cycle'||CAL_BUCKET[interval]){
+    const daily=(await getDaily(market)).map(toBar);
+    const bars=interval==='Cycle'
+      ? barsFromCycles(daily,start,end)
+      : aggregateCalendar(daily.filter(b=>b.time>=start&&b.time<end).map(b=>[b.time,b.open,b.high,b.low,b.close,b.volume]),CAL_BUCKET[interval]).map(toBar);
+    bars._note='';
+    return bars;
+  }
   const [sec,g]=INTERVALS[interval];
   let rows, note='';
   if(g===86400){rows=(await getDaily(market)).filter(r=>r[0]>=start-sec&&r[0]<end)}
