@@ -53,7 +53,7 @@ async function draw(pushUrl){
   status(`${bars.length} ${interval} bars · ${marketLabel(m)} · last ${bars.at(-1).close.toFixed(2)} USD`+(bars._note||''));
   const note=$('sourceNote');
   if(note) note.textContent=(m==='combinedUSD'?SPLICE+' ':'')+'Daily history cached locally. Fine intervals for Coinbase/Bitstamp are fetched live.';
-  render(interval);clear_table();
+  render(interval);if(tableOpen)showTable();else clear_table();
 }
 let cycleSeries=[];
 async function drawCycles(){
@@ -78,7 +78,7 @@ async function drawCycles(){
   $('cycleTable').innerHTML=cycleTableHtml(cycles);
   $('cycleLegend').innerHTML=cycleLegendHtml(cycleSeries);
   renderCycles(align,mode);
-  clear_table();
+  if(tableOpen)showTable();else clear_table();
 }
 function cycleUsdAxisFormat(v, isLog){
   if(v==null||!isFinite(v)||v<=0)return '';
@@ -242,11 +242,58 @@ function render(interval){
 }
 function status(s){$('status').textContent=s}
 // ---- raw data table ----
-function clear_table(){$('chart_table').hidden=true;$('chart_table').tBodies[0].innerHTML=''}
-$('loadRaw').onclick=e=>{e.preventDefault();const tb=$('chart_table').tBodies[0];
-  tb.innerHTML=bars.slice().reverse().map(b=>{const w=(b.high+b.low+2*b.close)/4;
-    return `<tr><td>${new Date(b.time*1000).toISOString().slice(0,19).replace('T',' ')}</td><td>${b.open}</td><td>${b.high}</td><td>${b.low}</td><td>${b.close}</td><td>${b.volume.toFixed(2)}</td><td>${(b.volume*b.close).toFixed(2)}</td><td>${w.toFixed(2)}</td></tr>`}).join('');
-  $('chart_table').hidden=false};
+const PRICE_HEAD=['Timestamp','Open','High','Low','Close','Volume (BTC)','Volume (Currency)','Weighted Price'];
+const CYCLE_HEAD=['Cycle','Day #','Date','USD','Scaled'];
+let tableOpen=false, tableCsv=[];
+function setTableHead(cols){$('chart_table').tHead.innerHTML='<tr>'+cols.map(c=>'<th>'+c+'</th>').join('')+'</tr>'}
+function clear_table(){
+  tableOpen=false; tableCsv=[];
+  if($('chart_table').tBodies[0]) $('chart_table').tBodies[0].innerHTML='';
+  if($('tableWrap')) $('tableWrap').hidden=true;
+  if($('downloadCsv')) $('downloadCsv').hidden=true;
+  if($('loadRaw')) $('loadRaw').textContent='Show data';
+}
+function showTable(){
+  if($('cy').checked) fillCycleTable(); else fillPriceTable();
+  tableOpen=true;
+  $('tableWrap').hidden=false;
+  $('downloadCsv').hidden=false;
+  $('loadRaw').textContent='Hide data';
+}
+function toggleTable(e){if(e)e.preventDefault();if(tableOpen)clear_table();else showTable()}
+function fillPriceTable(){
+  setTableHead(PRICE_HEAD); tableCsv=[PRICE_HEAD.slice()];
+  $('chart_table').tBodies[0].innerHTML=bars.slice().reverse().map(b=>{
+    const w=(b.high+b.low+2*b.close)/4;
+    const rec=[new Date(b.time*1000).toISOString().slice(0,19).replace('T',' '),
+      String(b.open),String(b.high),String(b.low),String(b.close),
+      b.volume.toFixed(2),(b.volume*b.close).toFixed(2),w.toFixed(2)];
+    tableCsv.push(rec);
+    return '<tr>'+rec.map(c=>'<td>'+c+'</td>').join('')+'</tr>';
+  }).join('');
+}
+function fillCycleTable(){
+  setTableHead(CYCLE_HEAD); tableCsv=[CYCLE_HEAD.slice()];
+  const mode=$('cp').value||'usd';
+  const parts=[];
+  for(const line of (cycleSeries||[])){
+    const name=line.cycle?String(line.cycle.year):(line.anchorLabel||line.label||'');
+    for(const p of line.pts){
+      if(!p.bar) continue;
+      const rec=[name,String(p.day),isoUTC(p.bar.time),'$'+usd(p.bar.close),mode==='usd'?'—':cyclePriceFormat(p.value,mode)];
+      tableCsv.push(rec);
+      parts.push('<tr>'+rec.map(c=>'<td>'+c+'</td>').join('')+'</tr>');
+    }
+  }
+  $('chart_table').tBodies[0].innerHTML=parts.join('');
+}
+function csvEscape(v){const s=String(v??'');return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}
+function downloadCsv(e){
+  if(e)e.preventDefault();
+  if(!tableOpen) showTable();
+  const text=tableCsv.map(r=>r.map(csvEscape).join(',')).join('\n')+'\n';
+  downloadBlob(new Blob([text],{type:'text/csv;charset=utf-8'}),'btccharts-data.csv');
+}
 
 // ---- chart image export (watermark + title + panes) ----
 const WATERMARK_TEXT='chartsbtc.github.io/btccharts';
@@ -450,6 +497,8 @@ $('Prev').onclick=()=>shift(-1);$('Next').onclick=()=>shift(1);
 $('getPermalink').onclick=e=>{e.preventDefault();$('permalinkbox').hidden=!$('permalinkbox').hidden;$('permalink').select()};
 $('copyImage').onclick=copyChartImage;
 $('downloadPng').onclick=downloadChartPng;
+$('loadRaw').onclick=toggleTable;
+$('downloadCsv').onclick=downloadCsv;
 $('larger').onclick=e=>{e.preventDefault();document.body.classList.toggle('wide')};
 window.onpopstate=()=>{parseHash(location.hash.slice(1));syncCustom();syncViewToggle();draw(0)};
 // init: original defaults = 60 days, candlestick, MA 10/25 lengths, volume on

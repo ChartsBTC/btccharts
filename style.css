@@ -59,3 +59,8 @@ body.cycles-view #chartWatermark{left:72px;bottom:38px}
 body.cycles-view #charts.has-volume #chartWatermark{bottom:38px}
 
 #copyStatus{color:#2e7d32;font-weight:bold;margin-left:6px}
+
+#dataActions{margin:8px 0}
+#tableWrap{max-height:420px;overflow:auto;margin:6px 0 12px;border:1px solid #ddd}
+#tableWrap table.data{margin-top:0;width:100%}
+#tableWrap thead th{position:sticky;top:0;background:#f6f6f6;z-index:1}
