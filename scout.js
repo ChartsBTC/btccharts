@@ -464,6 +464,9 @@ window.addRatioPanel=addRatioPanel;
 window.ensureRatioOverlay=ensureRatioOverlay;
 window.formatRatioValue=formatRatioValue;
 window.ratioKind=ratioKind;
+window.blendCaptionText=blendCaptionText;
+window.blendOn=blendOn;
+
 window.parsePctList=parsePctList;
 window.percentileRank=percentileRank;
 window.ordinalPct=ordinalPct;
@@ -569,7 +572,7 @@ function makeScoutUplot(host, xs, ys, opts){
     legend:{show:false},
     scales:{
       x:{time:false,distr:3,log:10,range:(u,min,max)=>[xMin!=null?xMin:min,xMax!=null?xMax:max]},
-      y: opts.yLinear?{distr:1}:{distr:3,log:10},
+      y: Object.assign(opts.yLinear?{distr:1}:{distr:3,log:10}, opts.yRange?{range:(u,min,max)=>opts.yRange}:{}),
     },
     axes:[
       {scale:'x',stroke:'#333',grid:{stroke:'#eee'},ticks:{stroke:'#ccc'},
@@ -612,9 +615,70 @@ function makeScoutUplot(host, xs, ys, opts){
   return u;
 }
 
+
+function ranksOf(values){
+  const idx=[];
+  for(let i=0;i<values.length;i++){ const v=values[i]; if(v!=null&&isFinite(v)) idx.push(i); }
+  const sorted=idx.map(i=>values[i]).sort((a,b)=>a-b);
+  const out=values.map(()=>null);
+  const n=sorted.length;
+  if(!n) return out;
+  for(const i of idx){
+    const v=values[i];
+    let lo=0, hi=n;
+    while(lo<hi){ const m=(lo+hi)>>1; if(sorted[m]<=v) lo=m+1; else hi=m; }
+    out[i]=100*lo/n;
+  }
+  return out;
+}
+function blendScoreColor(s){
+  const t=Math.max(0,Math.min(1,(+s)/100));
+  const hex=c=>('0'+Math.round(c).toString(16)).slice(-2);
+  const lerp=(a,b,u)=>a+(b-a)*u;
+  const parse=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
+  const A=t<0.5?parse('#2e7d32'):parse('#f9a825');
+  const B=t<0.5?parse('#f9a825'):parse('#e53935');
+  const u=t<0.5?t/0.5:(t-0.5)/0.5;
+  return '#'+hex(lerp(A[0],B[0],u))+hex(lerp(A[1],B[1],u))+hex(lerp(A[2],B[2],u));
+}
+function drawBlendSeries(u, pr, xs, ys){
+  const ctx=u.ctx;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(u.bbox.left,u.bbox.top,u.bbox.width,u.bbox.height);
+  ctx.clip();
+  ctx.lineWidth=2*pr;
+  ctx.lineJoin='round';
+  ctx.lineCap='round';
+  ctx.setLineDash([]);
+  for(let i=1;i<xs.length;i++){
+    if(ys[i]==null||ys[i-1]==null) continue;
+    const x0=u.valToPos(xs[i-1],'x',true), y0=u.valToPos(ys[i-1],'y',true);
+    const x1=u.valToPos(xs[i],'x',true), y1=u.valToPos(ys[i],'y',true);
+    if(!isFinite(x0)||!isFinite(y0)||!isFinite(x1)||!isFinite(y1)) continue;
+    ctx.beginPath();
+    ctx.moveTo(x0,y0); ctx.lineTo(x1,y1);
+    ctx.strokeStyle=blendScoreColor((ys[i-1]+ys[i])/2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+function blendWeight(){
+  const n=parseFloat($('blw')&&$('blw').value);
+  return (isFinite(n)?Math.max(0,Math.min(100,n)):50)/100;
+}
+function blendOn(){return !!($('blp')&&$('blp').checked)}
+function blendCaptionText(b){
+  if(!b||b.last==null) return '';
+  const wr=Math.round(b.weight*100), wa=100-wr;
+  return 'Blended '+ordinalPct(b.last)+' pct (Price/PL '+ordinalPct(b.ratioRank)+', Years ahead '+ordinalPct(b.aheadRank)+'), weight '+wr+'/'+wa;
+}
+
 function renderPowerLawView(){
   clearCharts();
+  const showBlend=blendOn();
   document.body.classList.add('scout-view','scout-powerlaw');
+  document.body.classList.toggle('scout-blend',showBlend);
   $('charts').classList.remove('has-volume');
   const sample=bars.filter(b=>b&&b.close>0);
   const fit=fitPowerLaw(sample);
@@ -637,10 +701,26 @@ function renderPowerLawView(){
   const yaNow=aheadY.at(-1);
   window.lastYearsAhead=yaNow;
   const yaText=formatYearsMonths(yaNow);
+  const wRatio=blendWeight();
+  const ratioRanks=ranksOf(ratioY);
+  const aheadRanks=ranksOf(aheadY);
+  const blendY=ratioRanks.map((r,i)=>{
+    const a=aheadRanks[i];
+    return (r==null||a==null)?null:(wRatio*r+(1-wRatio)*a);
+  });
+  const lastBlend=blendY.at(-1);
+  window.lastBlend=showBlend||lastBlend!=null?{
+    weight:wRatio,
+    last:lastBlend,
+    ratioRank:ratioRanks.at(-1),
+    aheadRank:aheadRanks.at(-1),
+    points:barAt.map((b,i)=>({time:b.time,blend:blendY[i],ratioRank:ratioRanks[i],aheadRank:aheadRanks[i]})),
+  }:null;
+
   const el=$('plLegend');
   if(el){
     el.hidden=false;
-    el.textContent=powerLawLegendText(fit)+'   ·   Years ahead  '+yaText+(ratio&&ratioRankText(ratio)?'   ·   '+ratioRankText(ratio):'');
+    el.textContent=[powerLawLegendText(fit),'Years ahead  '+yaText, ratio?ratioRankText(ratio):'', showBlend?blendCaptionText(window.lastBlend):''].filter(Boolean).join('   ·   ');
   }
 
   const main=$('main');
@@ -741,6 +821,32 @@ function renderPowerLawView(){
     yFormat:v=> (v>=0?'+':'')+v.toFixed(1),
   });
 
+  if(showBlend){
+    const bHost=document.createElement('div'); bHost.className='sub scout-panel';
+    $('subs').appendChild(bHost);
+    const refLines=parsePctList().map(p=>({p,value:p,color:pctBandColor(p)}));
+    makeScoutUplot(bHost,xs,blendY,{
+      xMin,xMax,xLabels:true,yLinear:true,yRange:[0,100],
+      stroke:'rgba(0,0,0,0)',lineWidth:0,title:'Blended Percentile',
+      onDraw:(u,pr)=>{
+        drawUplotHLines(u,pr,refLines,{format:v=>Math.round(v)+'%',label:lv=>lv.p+'%'});
+        drawBlendSeries(u,pr,xs,blendY);
+        const cur=blendCaptionText(window.lastBlend);
+        if(cur){
+          const ctx=u.ctx;
+          ctx.save();
+          ctx.font='bold '+(11*pr)+'px Verdana,Arial,sans-serif';
+          ctx.fillStyle='#333';
+          ctx.textAlign='left';
+          ctx.textBaseline='top';
+          ctx.fillText(cur, u.bbox.left+8*pr, u.bbox.top+6*pr);
+          ctx.restore();
+        }
+      },
+      yFormat:v=>Math.round(v)+'%',
+    });
+  }
+
   const top=scoutPlots[0];
   top.root.addEventListener?null:null;
   // hover legend
@@ -761,6 +867,7 @@ function renderPowerLawView(){
       bits.push(rtxt);
     }
     if(aheadY[i]!=null) bits.push('Years ahead '+formatYearsMonths(aheadY[i]));
+    if(showBlend&&blendY[i]!=null) bits.push('Blended '+ordinalPct(blendY[i])+' pct (Price/PL '+ordinalPct(ratioRanks[i])+', Years ahead '+ordinalPct(aheadRanks[i])+')');
     $('legend').textContent=bits.join('  ·  ');
   };
   scoutPlots.forEach(u=>u.setCursor&&null);
@@ -768,7 +875,7 @@ function renderPowerLawView(){
   // Listen on mousemove of each root.
   scoutPlots.forEach(u=>{
     u.root.addEventListener('mousemove',()=>setLeg(u));
-    u.root.addEventListener('mouseleave',()=>{$('legend').textContent=[yaText?'Years ahead  '+yaText:'', ratio?ratioRankText(ratio):''].filter(Boolean).join('  ·  ')});
+    u.root.addEventListener('mouseleave',()=>{$('legend').textContent=[yaText?'Years ahead  '+yaText:'', ratio?ratioRankText(ratio):'', showBlend?blendCaptionText(window.lastBlend):''].filter(Boolean).join('  ·  ')});
   });
 }
 
@@ -1301,4 +1408,6 @@ async function renderReturnsView(){
   ch.timeScale().fitContent();
   setTimeout(()=>ch.timeScale().fitContent(),50);
 }
-
+window.blendCaptionText=blendCaptionText;
+window.blendOn=blendOn;
+window.ranksOf=ranksOf;

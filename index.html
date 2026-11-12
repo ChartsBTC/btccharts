@@ -121,6 +121,10 @@
     </select></label>
     <label><input type="checkbox" id="rcl" checked>Cycle labels</label>
   </span>
+  <span id="blendOpts" class="scout-opts" hidden>
+    <label><input type="checkbox" id="blp">Blended percentile</label>
+    <label id="blwBox">Ratio weight <input id="blw" type="range" min="0" max="100" value="50" step="5"> <span id="blwVal">50</span>%</label>
+  </span>
   <span id="pctBandOpts" class="scout-opts" hidden>
     <label>Percentiles <input id="pb" size="20" value="1, 5, 20, 50, 80, 95, 99" title="Comma-separated percentiles of the displayed ratio"></label>
     <label><input type="checkbox" id="pbp">Show bands on price</label>

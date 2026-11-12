@@ -127,3 +127,10 @@ body.scout-returns #main{height:480px}
 
 body.has-pct-bands #pctBandOpts{display:inline-flex}
 #pctBandOpts input[type="text"],#pctBandOpts input#pb{font-size:12px;width:160px}
+
+body.scout-powerlaw #blendOpts{display:inline-flex}
+body.scout-powerlaw:not(.scout-blend) #blwBox{display:none}
+body.scout-powerlaw.scout-blend #main{height:280px}
+body.scout-powerlaw.scout-blend .sub.scout-panel{height:150px}
+#blw{vertical-align:middle;width:120px}
+#blwVal{display:inline-block;min-width:2em;text-align:right}
