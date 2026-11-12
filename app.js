@@ -94,6 +94,65 @@ let uplot=null,lastMarks=[];
 const GENESIS=Date.UTC(2009,0,3)/1000;
 const daysSinceGenesis=t=>(t-GENESIS)/86400;
 
+function yearAtDays(d){
+  return new Date((GENESIS+d*86400)*1000).getUTCFullYear();
+}
+function logLogDayTicks(min,max,dataMin,dataMax){
+  let lo=Math.max(1,min||1), hi=Math.max(lo*1.01,max||lo*10);
+  // Keep left-padded ticks (e.g. 500d) if the scale shows them, but never
+  // label days past the last bar (avoids 2028 / 2036 past the data).
+  if(dataMax!=null) hi=Math.min(hi,dataMax);
+  if(!(hi>lo)) return [];
+  const span=Math.log10(hi/Math.max(lo,dataMin||lo));
+  const minors=span>1.0?[1,2,3,5]:span>0.55?[1,1.5,2,3,4,5,7]:[1,1.2,1.5,2,2.5,3,4,5,6,7,8,9];
+  const out=[];
+  const e0=Math.floor(Math.log10(lo))-1, e1=Math.ceil(Math.log10(hi))+1;
+  for(let e=e0;e<=e1;e++){
+    const base=10**e;
+    if(base<=0) continue;
+    for(const m of minors){
+      const d=m*base;
+      if(d>=lo&&d<=hi) out.push(d);
+    }
+  }
+  return [...new Set(out)].sort((a,b)=>a-b);
+}
+function drawLogLogXLabels(u){
+  const min=u.scales.x.min, max=u.scales.x.max;
+  if(min==null||max==null) return;
+  const ctx=u.ctx, pr=u.pxRatio||window.devicePixelRatio||1;
+  const xs=u.data&&u.data[0];
+  const ticks=logLogDayTicks(min,max,xs&&xs[0],xs&&xs[xs.length-1]);
+  ctx.save();
+  // The series pass may leave a clip on the plot box; labels sit in the axis band.
+  ctx.beginPath();
+  ctx.rect(0,0,u.width*pr,u.height*pr);
+  ctx.clip();
+  ctx.font=(11*pr)+'px Verdana,Arial,sans-serif';
+  ctx.fillStyle='#333';
+  ctx.textAlign='center';
+  ctx.textBaseline='top';
+  const axisY=(u.bbox.top+u.bbox.height)+5*pr;
+  let lastX=-1e9;
+  const minGap=70*pr;
+  const left=u.bbox.left, right=u.bbox.left+u.bbox.width;
+  for(const d of ticks){
+    const x=u.valToPos(d,'x',true);
+    if(!isFinite(x)||x<left-4*pr||x>right+4*pr) continue;
+    if(x-lastX<minGap) continue;
+    const dayLab=Math.round(d)+'d';
+    ctx.font=(11*pr)+'px Verdana,Arial,sans-serif';
+    ctx.fillStyle='#333';
+    ctx.fillText(dayLab,x,axisY);
+    ctx.font=(10*pr)+'px Verdana,Arial,sans-serif';
+    ctx.fillStyle='#555';
+    ctx.fillText(String(yearAtDays(d)),x,axisY+13*pr);
+    lastX=x;
+  }
+  ctx.restore();
+}
+
+
 function fitPowerLaw(sample){
   const xs=[],ys=[],used=[];
   for(const b of sample||[]){
@@ -406,19 +465,8 @@ function renderLogLog(marks){
     legend:{show:false},
     scales:{x:{time:false,distr:3,log:10},y:{distr:3,log:10}},
     axes:[
-      {scale:'x',stroke:'#333',grid:{stroke:'#eee'},ticks:{stroke:'#ccc'},size:40,space:10,font:'11px Verdana,Arial,sans-serif',
-        splits:(u,axisIdx,min,max)=>{
-          const out=[];
-          const dataMaxY=new Date((GENESIS+xs[xs.length-1]*86400)*1000).getUTCFullYear();
-          const y0=new Date((GENESIS+Math.max(1,min)*86400)*1000).getUTCFullYear();
-          const y1=Math.min(dataMaxY, new Date((GENESIS+max*86400)*1000).getUTCFullYear());
-          const step=y1-y0>10?2:1;
-          for(let y=y0;y<=y1;y+=step){
-            const d=(Date.UTC(y,0,1)/1000-GENESIS)/86400;
-            if(d>=min&&d<=max&&d>0) out.push(d);
-          }
-          return out;
-        },
+      {scale:'x',stroke:'#333',grid:{stroke:'#eee'},ticks:{stroke:'#ccc'},size:48,space:10,font:'11px Verdana,Arial,sans-serif',
+        splits:(u,axisIdx,min,max)=>logLogDayTicks(min,max,xs[0],xs[xs.length-1]),
         values:(u,splits)=>splits.map(()=>'')},
       {scale:'y',stroke:'#333',grid:{stroke:'#eee'},ticks:{stroke:'#ccc'},size:64,font:'11px Verdana,Arial,sans-serif',
         values:(u,splits)=>splits.map(v=>v>0?(v>=1000?compact(v):String(+v.toPrecision(3))):'')},
@@ -438,7 +486,7 @@ function renderLogLog(marks){
       draw:[u=>{
         drawPowerLawUplot(u,xs,barAt);
         const list=marks||lastMarks||[];
-        if(!list.length) return;
+        if(!list.length){drawLogLogXLabels(u);return}
         const ctx=u.ctx, pr=u.pxRatio||window.devicePixelRatio||1;
         ctx.save();
         ctx.font=11*pr+'px Verdana,Arial,sans-serif';
@@ -457,25 +505,8 @@ function renderLogLog(marks){
           ctx.fillStyle=m.color||'#333';
           ctx.fillText(m.text,x+6*pr,y+(m.position==='belowBar'?12: -6)*pr);
         }
-        // Year labels along the log-x axis (uPlot hides later log ticks as “too close”).
-        const min=u.scales.x.min, max=u.scales.x.max;
-        if(min!=null&&max!=null){
-          ctx.font=(11*pr)+'px Verdana,Arial,sans-serif';
-          ctx.fillStyle='#333';
-          ctx.textAlign='center';
-          ctx.textBaseline='top';
-          const axisY=(u.bbox.top+u.bbox.height)+8*pr;
-          const dataMaxY=new Date((GENESIS+xs[xs.length-1]*86400)*1000).getUTCFullYear();
-          const y0=new Date((GENESIS+Math.max(1,min)*86400)*1000).getUTCFullYear();
-          const y1=Math.min(dataMaxY, new Date((GENESIS+max*86400)*1000).getUTCFullYear());
-          const step=y1-y0>10?2:1;
-          for(let y=y0;y<=y1;y+=step){
-            const d=(Date.UTC(y,0,1)/1000-GENESIS)/86400;
-            if(d<min||d>max||!(d>0)) continue;
-            ctx.fillText(String(y),u.valToPos(d,'x',true),axisY);
-          }
-        }
         ctx.restore();
+        drawLogLogXLabels(u);
       }],
     },
   };
@@ -653,8 +684,9 @@ function paintWatermark(ctx,x,y,w,h,dpr,opts){
   ctx.textAlign='left';
   // Sit in the plot, above the time axis (and above volume if it is on).
   let left=14*dpr, bottom=36*dpr;
-  if(opts.cycles) left=72*dpr;
+  if(opts.cycles||opts.loglog) left=72*dpr;
   if(opts.volume) bottom=h*0.22+12*dpr;
+  if(opts.loglog) bottom=52*dpr;
   const tx=x+left, ty=y+h-bottom;
   ctx.lineWidth=Math.max(2,3*dpr);
   ctx.strokeStyle='rgba(255,255,255,0.8)';
@@ -683,7 +715,7 @@ async function composeChartImage(){
     ctx.fillText(chartTitleLine(),pad,pad);
     if(sub){ctx.fillStyle='#b86a00';ctx.font=Math.round(11*dpr)+'px Verdana,Arial,sans-serif';ctx.fillText(sub,pad,pad+titleH-Math.round(8*dpr))}
     ctx.drawImage(cv,0,pad+titleH+subH);
-    paintWatermark(ctx,0,pad+titleH+subH,width,cv.height,dpr,{cycles:true});
+    paintWatermark(ctx,0,pad+titleH+subH,width,cv.height,dpr,{loglog:true});
     return canvas;
   }
   if(!charts.length) throw new Error('No chart to export');
