@@ -11,8 +11,8 @@ const MARKETS={
 const SPLICE='Combined history: Mt. Gox through 2013-12-31, then Bitstamp from 2014-01-01 through 2016-12-31, then Coinbase from 2017-01-01.';
 // interval name -> [seconds, native granularity used to build it]
 const INTERVALS={'1-min':[60,60],'5-min':[300,300],'15-min':[900,900],'30-min':[1800,900],'Hourly':[3600,3600],
-  '2-hour':[7200,3600],'6-hour':[21600,21600],'12-hour':[43200,21600],'Daily':[86400,86400],'Weekly':[604800,86400]};
-const BS_STEP={'1-min':60,'5-min':300,'15-min':900,'30-min':1800,'Hourly':3600,'2-hour':7200,'6-hour':21600,'12-hour':43200,'Daily':86400};
+  '2-hour':[7200,3600],'3-hour':[10800,3600],'6-hour':[21600,21600],'12-hour':[43200,21600],'Daily':[86400,86400],'Weekly':[604800,86400]};
+const BS_STEP={'1-min':60,'5-min':300,'15-min':900,'30-min':1800,'Hourly':3600,'2-hour':7200,'3-hour':3600,'6-hour':21600,'12-hour':43200,'Daily':86400};
 const MAX_REQ=60;
 const mem={};const dailyCache={};
 const toBar=r=>({time:r[0],open:r[1],high:r[2],low:r[3],close:r[4],volume:r[5]});
