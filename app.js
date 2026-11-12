@@ -23,6 +23,7 @@ function syncViewToggle(){
   document.body.classList.toggle('scout-view',!!vt && !on);
   document.body.classList.toggle('scout-powerlaw',vt==='powerlaw' && !on);
   document.body.classList.toggle('scout-drawdown',vt==='drawdown' && !on);
+  document.body.classList.toggle('scout-ath',vt==='ath' && !on);
   document.querySelectorAll('#viewToggle button').forEach(b=>b.classList.toggle('on',(b.dataset.cy==='1')===on && !vt));
   if(!vt && !on) document.querySelectorAll('#viewToggle button').forEach(b=>b.classList.toggle('on',(b.dataset.cy==='1')===false));
   $('main').classList.toggle('cycles',on);
@@ -272,7 +273,7 @@ function drawPowerLawUplot(u,xs,barAt){
 }
 
 let plSeries={};
-function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if(typeof clearScoutPlots==='function')clearScoutPlots();if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view','scout-view','scout-powerlaw','scout-drawdown');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null}
+function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if(typeof clearScoutPlots==='function')clearScoutPlots();if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view','scout-view','scout-powerlaw','scout-drawdown','scout-ath');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null}
 
 async function draw(pushUrl){
   const hash=buildHash();
@@ -611,7 +612,7 @@ function clear_table(){
   if($('loadRaw')) $('loadRaw').textContent='Show data';
 }
 function showTable(){
-  if($('cy').checked) fillCycleTable(); else if(typeof scoutView==='function'&&scoutView()==='powerlaw') fillPowerLawTable(); else if(scoutView()==='drawdown') fillDrawdownTable(); else fillPriceTable();
+  if($('cy').checked) fillCycleTable(); else if(typeof scoutView==='function'&&scoutView()==='powerlaw') fillPowerLawTable(); else if(scoutView()==='drawdown') fillDrawdownTable(); else if(scoutView()==='ath') fillAthTable(); else fillPriceTable();
   tableOpen=true;
   $('tableWrap').hidden=false;
   $('downloadCsv').hidden=false;
@@ -655,6 +656,19 @@ function fillCycleTable(){
     }
   }
   $('chart_table').tBodies[0].innerHTML=parts.join('');
+}
+function fillAthTable(){
+  const ser=window.lastScout&&window.lastScout.series, between=window.lastScout&&window.lastScout.between, head=['Date','Close','New ATH','Days since previous ATH'];
+  setTableHead(head); tableCsv=[head.slice()];
+  const athSet=new Set((ser?ser.aths:[]).map(a=>a.time));
+  const dayBy=new Map((between||[]).map(p=>[p.time,p.value]));
+  const rows=[];
+  for(const b of (ser?ser.bars:bars).slice().reverse()){
+    const rec=[isoUTC(b.time),String(b.close),athSet.has(b.time)?'yes':'',dayBy.has(b.time)?String(Math.round(dayBy.get(b.time))):''];
+    tableCsv.push(rec);
+    rows.push('<tr>'+rec.map(c=>'<td>'+c+'</td>').join('')+'</tr>');
+  }
+  $('chart_table').tBodies[0].innerHTML=rows.join('');
 }
 function fillDrawdownTable(){
   const ser=window.lastScout&&window.lastScout.series, head=['Date','Close','ATH','Drawdown %'];
@@ -703,10 +717,10 @@ function isMobileUa(){
 }
 function chartTitleLine(){
   const vt=($('vt')&&$('vt').value)||'';
-  if(vt==='powerlaw'||vt==='drawdown'){
+  if(vt==='powerlaw'||vt==='drawdown'||vt==='ath'){
     const m=currentMarket();
     const name=m==='combinedUSD'?'BTC/USD Combined':('BTC/USD '+marketLabel(m).replace(/ \(USD\)/,''));
-    const label={powerlaw:'Power Law',drawdown:'Drawdown from ATH'}[vt];
+    const label={powerlaw:'Power Law',drawdown:'Drawdown from ATH',ath:'ATHs and days between'}[vt];
     return name+' · '+(($('i').value)||'Daily')+' · '+label;
   }
   const scale=($('ll')&&$('ll').checked)?'Log-Log':($('p').checked?'Percentage':($('l').checked?'Log':'Linear'));
@@ -950,6 +964,16 @@ function shareCaption(){
       bits.push('Currently '+last.value.toFixed(1)+'% from ATH ($'+usd(ath.value)+')');
     }
     if(bars.length) bits.push('Last $'+Number(bars.at(-1).close).toLocaleString('en-US',{maximumFractionDigits:0})+' on '+isoUTC(bars.at(-1).time));
+    return bits.join('. ')+'.';
+  }
+  if(vt==='ath'){
+    bits.push('Bitcoin all-time highs and days between them');
+    const ser=window.lastScout&&window.lastScout.series;
+    if(ser&&ser.aths.length){
+      const last=ser.aths.at(-1);
+      const gap=window.lastScout.between&&window.lastScout.between.at(-1);
+      bits.push(ser.aths.length+' closing ATHs, last $'+usd(last.price)+' on '+isoUTC(last.time)+(gap?', '+Math.round(gap.value)+' days since':'') );
+    }
     return bits.join('. ')+'.';
   }
   if($('cy')&&$('cy').checked){

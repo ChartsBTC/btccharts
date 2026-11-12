@@ -102,3 +102,7 @@ body.scout-view #charts{overflow:visible}
 body.scout-drawdown #main{height:220px}
 body.scout-drawdown .sub.scout-panel{height:300px}
 body.scout-drawdown #scaleToggle{display:none}
+
+body.scout-ath #main{height:340px}
+body.scout-ath .sub.scout-panel{height:200px}
+body.scout-ath #scaleToggle{display:none}

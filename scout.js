@@ -520,6 +520,7 @@ function renderScout(kind){
   kind=kind||scoutView();
   if(kind==='powerlaw'){renderPowerLawView();return true}
   if(kind==='drawdown'){renderDrawdownView();return true}
+  if(kind==='ath'){renderAthView();return true}
   return false;
 }
 
@@ -597,6 +598,68 @@ function renderDrawdownView(){
     const d=series.dd.find(x=>x.time===t);
     const a=series.athLine.find(x=>x.time===t);
     return isoUTC(t)+'  ·  $'+usd(b.close)+(a?'  ·  ATH $'+usd(a.value):'')+(d?'  ·  DD '+d.value.toFixed(1)+'%':'');
+  });
+  syncScoutLw();
+}
+
+
+
+function daysBetweenAths(aths, bars){
+  if(!aths.length||!bars.length) return [];
+  let i=0, last=aths[0].time;
+  const pts=[];
+  for(const b of bars){
+    if(i+1<aths.length && b.time>=aths[i+1].time){
+      // peak at the new ATH bar, then reset
+      pts.push({time:b.time,value:(aths[i+1].time-last)/86400});
+      last=aths[i+1].time;
+      i++;
+      continue;
+    }
+    pts.push({time:b.time,value:Math.max(0,(b.time-last)/86400)});
+  }
+  return pts;
+}
+
+function renderAthView(){
+  clearCharts();
+  document.body.classList.add('scout-view','scout-ath');
+  $('charts').classList.remove('has-volume');
+  const series=computeAthSeries(bars);
+  const between=daysBetweenAths(series.aths, series.bars);
+  window.lastScout={kind:'ath',series,between};
+  const main=$('main');
+  main.innerHTML='';
+  $('subs').innerHTML='';
+  const px=mkChart(main,{localization:{priceFormatter:compact}});
+  charts.push(px);
+  px.priceScale('right').applyOptions({mode:LW.PriceScaleMode.Logarithmic,scaleMargins:{top:.06,bottom:.08}});
+  const barsHist=px.addHistogramSeries({
+    priceScaleId:'athbar',priceLineVisible:false,lastValueVisible:false,base:0,
+  });
+  px.priceScale('athbar').applyOptions({visible:false,scaleMargins:{top:0,bottom:0}});
+  barsHist.setData(series.aths.map(a=>({time:a.time,value:1,color:'rgba(120,120,120,0.4)'})));
+  const close=px.addLineSeries({color:'#f9a825',lineWidth:2,priceLineVisible:false,lastValueVisible:true,title:'Close'});
+  close.setData(series.bars.map(b=>({time:b.time,value:b.close})));
+
+  const host=document.createElement('div');
+  host.className='sub scout-panel';
+  host.innerHTML='<span class="lbl">Days Between ATHs</span>';
+  $('subs').appendChild(host);
+  const ch=mkChart(host,{});
+  charts.push(ch);
+  ch.priceScale('right').applyOptions({mode:LW.PriceScaleMode.Normal,scaleMargins:{top:.08,bottom:.08}});
+  const saw=ch.addLineSeries({color:'#e53935',lineWidth:1.5,priceLineVisible:false,lastValueVisible:true,title:'Days'});
+  saw.setData(between);
+  hookLegend(px,t=>{
+    const b=series.bars.find(x=>x.time===t); if(!b) return '';
+    const isAth=series.aths.some(a=>a.time===t);
+    const d=between.find(x=>x.time===t);
+    return isoUTC(t)+'  ·  $'+usd(b.close)+(isAth?'  ·  ATH':'')+(d?'  ·  '+Math.round(d.value)+' days since previous ATH':'');
+  });
+  hookLegend(ch,t=>{
+    const d=between.find(x=>x.time===t);
+    return d?isoUTC(t)+'  ·  '+Math.round(d.value)+' days since previous ATH':'';
   });
   syncScoutLw();
 }
