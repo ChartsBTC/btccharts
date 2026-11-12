@@ -73,3 +73,6 @@ body.cycles-view #scaleToggle [data-scale="loglog"]{display:none}
 body.loglog-view #chartWatermark{left:72px;bottom:38px}
 #main .uplot,#main .u-wrap{width:100%;height:100%}
 #main .u-legend{display:none}
+
+#plLegend{margin:0 0 8px;font:12px/1.4 Verdana,Arial,sans-serif;color:#b86a00}
+body.cycles-view #plLegend{display:none}

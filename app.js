@@ -1,6 +1,6 @@
 const $=id=>document.getElementById(id);
 const LW=LightweightCharts;
-const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','cy','ca','cp','ch','cl','hv','ll'];
+const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','cy','ca','cp','ch','cl','hv','ll','pl'];
 // populate indicator selects (only implemented ones, original naming)
 document.querySelectorAll('select.ind').forEach(s=>{s.innerHTML='<option value="">None</option>'+Object.entries(INDICATORS).map(([k,v])=>`<option value="${k}">${v.label.replace(/ \(.*/,'')}</option>`).join('')});
 
@@ -93,7 +93,121 @@ const ser=(arr)=>bars.map((b,i)=>arr[i]==null||!isFinite(arr[i])?{time:b.time}:{
 let uplot=null,lastMarks=[];
 const GENESIS=Date.UTC(2009,0,3)/1000;
 const daysSinceGenesis=t=>(t-GENESIS)/86400;
-function clearCharts(){charts.forEach(c=>c.remove());charts=[];if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view')}
+
+function fitPowerLaw(sample){
+  const xs=[],ys=[],used=[];
+  for(const b of sample||[]){
+    const d=daysSinceGenesis(b.time), p=b.close;
+    if(!(d>0)||!(p>0)) continue;
+    xs.push(Math.log10(d)); ys.push(Math.log10(p)); used.push(b);
+  }
+  const n=xs.length; if(n<3) return null;
+  let sx=0,sy=0,sxx=0,sxy=0;
+  for(let i=0;i<n;i++){sx+=xs[i];sy+=ys[i];sxx+=xs[i]*xs[i];sxy+=xs[i]*ys[i]}
+  const den=n*sxx-sx*sx; if(Math.abs(den)<1e-18) return null;
+  const b=(n*sxy-sx*sy)/den, a=(sy-b*sx)/n, ymean=sy/n;
+  let ssTot=0,ssRes=0;
+  for(let i=0;i<n;i++){const yhat=a+b*xs[i];ssRes+=(ys[i]-yhat)**2;ssTot+=(ys[i]-ymean)**2}
+  const r2=ssTot>0?1-ssRes/ssTot:0, sigma=Math.sqrt(ssRes/Math.max(1,n-2));
+  return {a,b,r2,sigma,n,from:isoUTC(used[0].time),to:isoUTC(used.at(-1).time),t0:used[0].time,t1:used.at(-1).time};
+}
+function powerLawPrice(days,a,b){return Math.pow(10,a+b*Math.log10(days))}
+function powerLawLegendText(fit){
+  if(!fit) return '';
+  const a=fit.a.toFixed(3), b=(fit.b>=0?'+ ':'- ')+Math.abs(fit.b).toFixed(3);
+  return 'Power law:  log\u2081\u2080(price) = '+a+' '+b+'\u00b7log\u2081\u2080(days)   \u00b7   R\u00b2='+fit.r2.toFixed(3)+'   \u00b7   fit '+fit.from+'\u2013'+fit.to+' (n='+fit.n+')';
+}
+function setPlLegend(fit){
+  window.lastPowerFit=fit||null;
+  const el=$('plLegend'); if(!el) return;
+  if(fit&&$('pl')&&$('pl').checked){el.hidden=false;el.textContent=powerLawLegendText(fit)}
+  else{el.hidden=true;el.textContent=''}
+}
+function visiblePriceBars(chart){
+  let src=bars.filter(b=>b&&b.close>0);
+  if(chart&&chart.timeScale){
+    const vr=chart.timeScale().getVisibleRange();
+    if(vr){
+      const vis=src.filter(b=>b.time>=vr.from&&b.time<=vr.to);
+      // A fresh fitContent can clip a few edge bars; if nearly all data is
+      // on screen, fit the full loaded window (market / cycle preset).
+      if(vis.length>=src.length*0.95) return src;
+      return vis;
+    }
+  }
+  return src;
+}
+function powerLawPoints(fit,t0,t1,n){
+  n=n||240; const mid=[],lo=[],hi=[];
+  const d0=Math.max(1e-6,daysSinceGenesis(t0)), d1=Math.max(d0*1.001,daysSinceGenesis(t1));
+  const k=Math.pow(10,fit.sigma);
+  for(let i=0;i<n;i++){
+    const d=d0*Math.pow(d1/d0,i/(n-1)), t=Math.round(GENESIS+d*86400), p=powerLawPrice(d,fit.a,fit.b);
+    mid.push({time:t,value:p}); lo.push({time:t,value:p/k}); hi.push({time:t,value:p*k});
+  }
+  return {mid,lo,hi};
+}
+function applyPowerLawLW(chart){
+  if(!chart||!($('pl')&&$('pl').checked)){setPlLegend(null);return null}
+  const sample=visiblePriceBars(chart);
+  const fit=fitPowerLaw(sample);
+  setPlLegend(fit);
+  if(!fit){
+    if(plSeries.mid){plSeries.mid.setData([]);plSeries.lo.setData([]);plSeries.hi.setData([])}
+    return null;
+  }
+  const vr=chart.timeScale().getVisibleRange();
+  const t0=vr?vr.from:fit.t0, t1=vr?vr.to:fit.t1;
+  const pts=powerLawPoints(fit,t0,t1);
+  if(!plSeries.mid){
+    const sty={priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false};
+    plSeries.hi=chart.addLineSeries({color:'rgba(247,147,26,0.4)',lineWidth:1,lineStyle:2,...sty});
+    plSeries.lo=chart.addLineSeries({color:'rgba(247,147,26,0.4)',lineWidth:1,lineStyle:2,...sty});
+    plSeries.mid=chart.addLineSeries({color:'#f7931a',lineWidth:2,...sty});
+  }
+  plSeries.hi.setData(pts.hi); plSeries.lo.setData(pts.lo); plSeries.mid.setData(pts.mid);
+  return fit;
+}
+function drawPowerLawUplot(u,xs,barAt){
+  if(!($('pl')&&$('pl').checked)){setPlLegend(null);return}
+  const min=u.scales.x.min, max=u.scales.x.max;
+  const sample=barAt.filter((b,i)=>xs[i]>=min&&xs[i]<=max);
+  const fit=fitPowerLaw(sample);
+  setPlLegend(fit);
+  if(!fit) return;
+  const ctx=u.ctx, pr=u.pxRatio||window.devicePixelRatio||1;
+  const d0=Math.max(min,1e-6), d1=Math.max(d0*1.001,max), N=240, k=Math.pow(10,fit.sigma);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(u.bbox.left,u.bbox.top,u.bbox.width,u.bbox.height);
+  ctx.clip();
+  ctx.beginPath();
+  for(let i=0;i<=N;i++){
+    const d=d0*Math.pow(d1/d0,i/N), p=powerLawPrice(d,fit.a,fit.b)*k;
+    const x=u.valToPos(d,'x',true), y=u.valToPos(p,'y',true);
+    i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+  }
+  for(let i=N;i>=0;i--){
+    const d=d0*Math.pow(d1/d0,i/N), p=powerLawPrice(d,fit.a,fit.b)/k;
+    ctx.lineTo(u.valToPos(d,'x',true),u.valToPos(p,'y',true));
+  }
+  ctx.closePath();
+  ctx.fillStyle='rgba(247,147,26,0.15)';
+  ctx.fill();
+  ctx.beginPath();
+  for(let i=0;i<=N;i++){
+    const d=d0*Math.pow(d1/d0,i/N), p=powerLawPrice(d,fit.a,fit.b);
+    const x=u.valToPos(d,'x',true), y=u.valToPos(p,'y',true);
+    i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+  }
+  ctx.strokeStyle='#f7931a';
+  ctx.lineWidth=2*pr;
+  ctx.stroke();
+  ctx.restore();
+}
+
+let plSeries={};
+function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view')}
 
 async function draw(pushUrl){
   const hash=buildHash();
@@ -322,6 +436,7 @@ function renderLogLog(marks){
         $('legend').textContent=isoUTC(b.time)+'  ·  day '+d.toFixed(0)+' since genesis  ·  O '+b.open+' H '+b.high+' L '+b.low+' C '+b.close;
       }],
       draw:[u=>{
+        drawPowerLawUplot(u,xs,barAt);
         const list=marks||lastMarks||[];
         if(!list.length) return;
         const ctx=u.ctx, pr=u.pxRatio||window.devicePixelRatio||1;
@@ -418,6 +533,7 @@ function render(interval, marks){
   charts.forEach(c=>c.priceScale('right').applyOptions({minimumWidth:80}));
   charts.forEach(c=>c.timeScale().subscribeVisibleLogicalRangeChange(r=>{if(syncing||!r)return;syncing=true;charts.forEach(o=>o!==c&&o.timeScale().setVisibleLogicalRange(r));syncing=false}));
   main.timeScale().fitContent();setTimeout(()=>main.timeScale().fitContent(),50);
+  if($('pl')&&$('pl').checked){let _plT;const refit=()=>{clearTimeout(_plT);_plT=setTimeout(()=>applyPowerLawLW(main),80)};main.timeScale().subscribeVisibleLogicalRangeChange(refit);setTimeout(()=>applyPowerLawLW(main),80)} else setPlLegend(null);
   main.subscribeCrosshairMove(p=>{const bar=p.time&&bars.find(x=>x.time===p.time);
     $('legend').textContent=bar?`${new Date(bar.time*1000).toISOString().slice(0,16).replace('T',' ')} O ${bar.open} H ${bar.high} L ${bar.low} C ${bar.close} V ${bar.volume.toFixed(2)}`:''});
 }
@@ -505,7 +621,7 @@ function chartTitleLine(){
   const preset=(typeof isCyclePreset==='function'&&isCyclePreset($('r').value))
     ?($('r').selectedOptions[0]?$('r').selectedOptions[0].text+' · ':'')
     :'';
-  return `${name} · ${preset}${interval} · ${scale}`;
+  return `${name} · ${preset}${interval} · ${scale}`+(($('pl')&&$('pl').checked)?' · Power Law':'');
 }
 function exportFilename(){
   const slug=chartTitleLine().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
@@ -556,16 +672,18 @@ async function composeChartImage(){
     const cv=uplot.ctx.canvas;
     const cssW=uplot.width||cv.clientWidth||cv.width;
     const dpr=cv.width/Math.max(1,cssW);
-    const width=cv.width, pad=Math.round(16*dpr), title=chartTitleLine();
-    const titleSize=Math.round(15*dpr), titleH=Math.round(28*dpr);
+    const width=cv.width, pad=Math.round(16*dpr);
+    const sub=($('pl')&&$('pl').checked&&window.lastPowerFit)?powerLawLegendText(window.lastPowerFit):'';
+    const titleSize=Math.round(15*dpr), titleH=Math.round(28*dpr), subH=sub?Math.round(18*dpr):0;
     const canvas=document.createElement('canvas');
-    canvas.width=width; canvas.height=pad+titleH+cv.height+pad;
+    canvas.width=width; canvas.height=pad+titleH+subH+cv.height+pad;
     const ctx=canvas.getContext('2d');
     ctx.fillStyle='#fff'; ctx.fillRect(0,0,canvas.width,canvas.height);
     ctx.fillStyle='#222'; ctx.font=titleSize+'px Verdana,Arial,sans-serif'; ctx.textBaseline='top';
-    ctx.fillText(title,pad,pad);
-    ctx.drawImage(cv,0,pad+titleH);
-    paintWatermark(ctx,0,pad+titleH,width,cv.height,dpr,{cycles:true});
+    ctx.fillText(chartTitleLine(),pad,pad);
+    if(sub){ctx.fillStyle='#b86a00';ctx.font=Math.round(11*dpr)+'px Verdana,Arial,sans-serif';ctx.fillText(sub,pad,pad+titleH-Math.round(8*dpr))}
+    ctx.drawImage(cv,0,pad+titleH+subH);
+    paintWatermark(ctx,0,pad+titleH+subH,width,cv.height,dpr,{cycles:true});
     return canvas;
   }
   if(!charts.length) throw new Error('No chart to export');
@@ -583,11 +701,13 @@ async function composeChartImage(){
   const title=chartTitleLine();
   const titleSize=Math.round(15*dpr);
   const titleH=Math.round(28*dpr);
+  const sub=($('pl')&&$('pl').checked&&window.lastPowerFit)?powerLawLegendText(window.lastPowerFit):'';
+  const subH=sub?Math.round(18*dpr):0;
   const legendItems=($('cy').checked&&typeof cycleSeries!=='undefined')?cycleSeries:[];
   const legendRow=legendItems.length?Math.round(20*dpr):0;
   const legendRows=legendItems.length?Math.ceil(legendItems.length/3):0;
   const legendH=legendRows*legendRow;
-  let totalH=pad+titleH+legendH+pad;
+  let totalH=pad+titleH+subH+legendH+pad;
   for(const p of panes) totalH+=p.cv.height;
   const canvas=document.createElement('canvas');
   canvas.width=width+0;
@@ -599,7 +719,8 @@ async function composeChartImage(){
   ctx.font=`${titleSize}px Verdana,Arial,sans-serif`;
   ctx.textBaseline='top';
   ctx.fillText(title,pad,pad);
-  let y=pad+titleH;
+  if(sub){ctx.fillStyle='#b86a00';ctx.font=Math.round(11*dpr)+'px Verdana,Arial,sans-serif';ctx.fillText(sub,pad,pad+titleH-Math.round(8*dpr));ctx.fillStyle='#222';ctx.font=titleSize+'px Verdana,Arial,sans-serif'}
+  let y=pad+titleH+subH;
   if(legendItems.length){
     ctx.font=`${Math.round(12*dpr)}px Verdana,Arial,sans-serif`;
     ctx.textBaseline='middle';
@@ -690,7 +811,7 @@ document.querySelectorAll('#viewToggle button').forEach(b=>b.onclick=()=>{const 
 $('chartoptions').addEventListener('change',e=>{if(e.target.id==='c'){if($('c').checked)setCustomDefaults();else{$('s').value=$('e').value=''}syncCustom()}
   if(e.target.id==='r'){$('c').checked=false;$('s').value=$('e').value='';syncCustom()}draw(1)});
 $('ca').addEventListener('change',()=>draw(1));
-['ch','cl','hv'].forEach(id=>$(id)&&$(id).addEventListener('change',()=>draw(1)));
+['ch','cl','hv','pl'].forEach(id=>$(id)&&$(id).addEventListener('change',()=>draw(1)));
 $('cp').addEventListener('change',()=>draw(1));
 $('SubmitButton').onclick=()=>draw(1);
 const shift=d=>{if(!$('c').checked){$('c').checked=true;setCustomDefaults();syncCustom()}
