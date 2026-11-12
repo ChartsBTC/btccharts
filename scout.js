@@ -2396,3 +2396,176 @@ async function renderRangesView(){
 window.renderRangesView=renderRangesView;
 window.rangeBandMode=rangeBandMode;
 window.formatBandEdge=formatBandEdge;
+
+const ANN_COLORS=['#f9a825','#ec407a','#26a69a','#7e57c2'];
+function parseFlatSpans(){
+  const raw=($('an')&&$('an').value)||'';
+  return String(raw).split(';').map(s=>s.trim()).filter(Boolean).map(s=>{
+    const parts=s.split(',').map(x=>x.trim());
+    if(parts.length<2) return null;
+    return {start:parts[0], end:parts[1]};
+  }).filter(x=>x&&/^\d{4}-\d{2}-\d{2}$/.test(x.start)&&/^\d{4}-\d{2}-\d{2}$/.test(x.end));
+}
+function writeFlatSpans(spans){
+  const v=(spans||[]).map(s=>s.start+','+s.end).join(';');
+  if($('an')) $('an').value=v;
+  return v;
+}
+function isoToTime(iso){return Date.parse(iso+'T00:00:00Z')/1000}
+function barNearTime(daily, t){
+  let best=null, bestDt=3*86400;
+  for(const b of daily){
+    const dt=Math.abs(b.time-t);
+    if(dt<=bestDt){best=b;bestDt=dt}
+  }
+  return best;
+}
+function formatSpanYears(y){
+  if(!(y>=0) || !isFinite(y)) return '';
+  const months=Math.round(y*12);
+  const yr=Math.round(y);
+  if(Math.abs(y-yr)<=0.12) return yr===1?'1 year':yr+' years';
+  const ys=Math.floor(months/12), mo=months%12;
+  if(!ys) return mo+' month'+(mo===1?'':'s');
+  return ys+' year'+(ys===1?'':'s')+(mo?(' '+mo+' month'+(mo===1?'':'s')):'');
+}
+function formatKx(k){
+  if(!(k>0)) return '';
+  if(k>=10) return k.toFixed(1).replace(/\.0$/,'')+'x';
+  return (Math.round(k*10)/10).toString().replace(/\.0$/,'')+'x';
+}
+function describeFlatSpan(daily, startIso, endIso){
+  let t0=isoToTime(startIso), t1=isoToTime(endIso);
+  if(!isFinite(t0)||!isFinite(t1)) return null;
+  if(t1<t0){const t=t0;t0=t1;t1=t; const s=startIso;startIso=endIso;endIso=s}
+  const b0=barNearTime(daily,t0), b1=barNearTime(daily,t1);
+  if(!b0||!b1||!(b0.close>0)) return null;
+  const level=b0.close;
+  const years=(b1.time-b0.time)/(365.25*86400);
+  let maxAfter=null;
+  for(const b of daily){
+    if(b.time>b1.time && (maxAfter==null||b.close>maxAfter.close)) maxAfter=b;
+  }
+  const k=maxAfter&&level>0?maxAfter.close/level:null;
+  let label=formatSpanYears(years)+', zero gains';
+  if(k!=null&&k>=1.2) label+=', then '+formatKx(k);
+  return {startIso,endIso,b0,b1,level,years,k,maxAfter,label};
+}
+function renderAnnList(){
+  const el=$('annList'); if(!el) return;
+  const spans=parseFlatSpans();
+  el.innerHTML=spans.map((s,i)=>{
+    const lab=(window.lastAnns&&window.lastAnns[i]&&window.lastAnns[i].label)||(s.start+' → '+s.end);
+    return '<span class="ann-chip" data-i="'+i+'">'+lab+' <button type="button" data-ann-remove="'+i+'" aria-label="Remove">×</button></span>';
+  }).join(' ');
+}
+async function hookFlatSpans(chart, series){
+  window._priceSeries=series;
+  renderAnnList();
+  const raw=parseFlatSpans();
+  if(!raw.length||!chart||!series) {window.lastAnns=[];return}
+  let daily=bars;
+  try{ if(typeof scoutDailyBars==='function') daily=await scoutDailyBars(); }catch(e){}
+  const metas=raw.map(s=>describeFlatSpan(daily,s.start,s.end)).filter(Boolean);
+  for(const m of metas){
+    if(m.maxAfter&&m.k!=null&&m.k>=1.2){
+      m.path=daily.filter(b=>b.time>=m.b1.time&&b.time<=m.maxAfter.time&&b.close>0).map(b=>({time:b.time,value:b.close}));
+    }
+  }
+  window.lastAnns=metas;
+  renderAnnList();
+  if(chart&&!chart._annClick){
+    chart._annClick=true;
+    chart.subscribeClick(param=>{
+      if(!param||param.time==null) return;
+      const iso=typeof isoUTC==='function'?isoUTC(param.time):new Date(param.time*1000).toISOString().slice(0,10);
+      const startEl=$('annStart'), endEl=$('annEnd');
+      if(!startEl) return;
+      if(!startEl.value||(startEl.value&&endEl&&endEl.value)){
+        startEl.value=iso; if(endEl) endEl.value='';
+        if($('legend')) $('legend').textContent='Start '+iso+' — click the end of the span';
+      }else{
+        if(endEl) endEl.value=iso;
+        if(typeof addFlatSpan==='function') addFlatSpan(startEl.value, iso);
+        if(typeof draw==='function') draw(1);
+      }
+    });
+  }
+  if(!metas.length||typeof attachChartOverlay!=='function') return;
+  attachChartOverlay(chart,(ctx,ch,w,h)=>{
+    const ts=ch.timeScale();
+    metas.forEach((m,i)=>{
+      const color=ANN_COLORS[i%ANN_COLORS.length];
+      const x0=ts.timeToCoordinate(m.b0.time);
+      const x1=ts.timeToCoordinate(m.b1.time);
+      const y=series.priceToCoordinate(m.level);
+      if(x0==null||x1==null||y==null) return;
+      const xa=Math.min(x0,x1), xb=Math.max(x0,x1);
+      ctx.save();
+      // subsequent rally along the actual price path
+      if(m.path&&m.path.length>1){
+        ctx.strokeStyle='#2e7d32'; ctx.lineWidth=2; ctx.lineJoin='round';
+        ctx.beginPath();
+        let started=false;
+        for(const p of m.path){
+          const x=ts.timeToCoordinate(p.time);
+          const py=series.priceToCoordinate(p.value);
+          if(x==null||py==null) continue;
+          if(!started){ctx.moveTo(x,py);started=true}else ctx.lineTo(x,py);
+        }
+        if(started) ctx.stroke();
+        const last=m.maxAfter;
+        const x2=ts.timeToCoordinate(last.time);
+        const y2=series.priceToCoordinate(last.close);
+        if(x2!=null&&y2!=null){
+          ctx.fillStyle='#2e7d32';
+          ctx.beginPath(); ctx.arc(x2,y2,3.5,0,Math.PI*2); ctx.fill();
+          ctx.font='bold 12px Verdana,Arial,sans-serif';
+          ctx.textAlign='left'; ctx.textBaseline='bottom';
+          const then='then '+formatKx(m.k);
+          ctx.lineWidth=3; ctx.strokeStyle='rgba(255,255,255,0.85)';
+          ctx.strokeText(then, x2+6, y2-6);
+          ctx.fillStyle='#1b5e20';
+          ctx.fillText(then, x2+6, y2-6);
+        }
+      }
+      ctx.strokeStyle=color; ctx.lineWidth=2.4; ctx.lineCap='round';
+      ctx.beginPath(); ctx.moveTo(xa,y); ctx.lineTo(xb,y); ctx.stroke();
+      ctx.fillStyle=color;
+      ctx.beginPath(); ctx.arc(xa,y,4,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(xb,y,4,0,Math.PI*2); ctx.fill();
+      const label=m.label.replace(/, then .*$/,'');
+      ctx.font='bold 13px Verdana,Arial,sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='bottom';
+      const mid=(xa+xb)/2;
+      ctx.lineWidth=3; ctx.strokeStyle=typeof isDark==='function'&&isDark()?'rgba(0,0,0,0.7)':'rgba(255,255,255,0.9)';
+      ctx.strokeText(label, mid, y-8);
+      ctx.fillStyle=color;
+      ctx.fillText(label, mid, y-8);
+      ctx.restore();
+    });
+  });
+}
+function addFlatSpan(start, end){
+  if(!start||!end) return false;
+  const spans=parseFlatSpans();
+  const key=start+','+end, rev=end+','+start;
+  if(spans.some(s=>s.start+','+s.end===key||s.start+','+s.end===rev)) return false;
+  spans.push({start,end});
+  writeFlatSpans(spans);
+  return true;
+}
+function removeFlatSpan(i){
+  const spans=parseFlatSpans();
+  spans.splice(i,1);
+  writeFlatSpans(spans);
+}
+window.parseFlatSpans=parseFlatSpans;
+window.writeFlatSpans=writeFlatSpans;
+window.describeFlatSpan=describeFlatSpan;
+window.hookFlatSpans=hookFlatSpans;
+window.addFlatSpan=addFlatSpan;
+window.removeFlatSpan=removeFlatSpan;
+window.renderAnnList=renderAnnList;
+window.formatSpanYears=formatSpanYears;
+window.formatKx=formatKx;

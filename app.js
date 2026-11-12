@@ -2,7 +2,7 @@ const $=id=>document.getElementById(id);
 const LW=LightweightCharts;
 
 const PUBLIC_CHART_BASE='https://chartsbtc.github.io/btccharts/';
-const ADVANCED_HASH_IDS=['cy','ll','pl','vt','rp','rpl','ep','ch','cl','hv','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','da','ca','cp','ym','otd','ott','rb'];
+const ADVANCED_HASH_IDS=['cy','ll','pl','vt','rp','rpl','ep','ch','cl','hv','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','da','ca','cp','ym','otd','ott','rb','an'];
 function isClassicPage(){return window.CHART_PAGE==='classic'}
 function isAdvancedPage(){return window.CHART_PAGE==='advanced'}
 function hashHasAdvanced(hash){
@@ -74,7 +74,7 @@ function initTheme(){
 }
 
 
-const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','da','cy','ca','cp','ch','cl','hv','ll','pl','ep','rp','rpl','vt','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','ym','otd','ott','rb'];
+const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','da','cy','ca','cp','ch','cl','hv','ll','pl','ep','rp','rpl','vt','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','ym','otd','ott','rb','an'];
 // populate indicator selects (only implemented ones, original naming)
 document.querySelectorAll('select.ind').forEach(s=>{s.innerHTML='<option value="">None</option>'+Object.entries(INDICATORS).map(([k,v])=>`<option value="${k}">${v.label.replace(/ \(.*/,'')}</option>`).join('')});
 
@@ -739,6 +739,7 @@ function render(interval, marks){
       ctx.restore();
     });
   }
+  if(typeof hookFlatSpans==='function') hookFlatSpans(main, mainSeries);
   if(($('pl')&&$('pl').checked)||($('rp')&&$('rp').value==='pl')){let _plT;const refit=()=>{clearTimeout(_plT);_plT=setTimeout(()=>applyPowerLawLW(main),80)};main.timeScale().subscribeVisibleLogicalRangeChange(refit);setTimeout(()=>applyPowerLawLW(main),80)} else setPlLegend(null);
   main.subscribeCrosshairMove(p=>{const bar=p.time&&bars.find(x=>x.time===p.time);
     if(!bar){$('legend').textContent=(typeof ratioRankText==='function'&&window.lastRatio)?ratioRankText(window.lastRatio):'';return}
@@ -1411,6 +1412,9 @@ function shareCaption(){
   if(window.lastRatio&&window.lastRatio.last){
     bits.push(typeof ratioRankText==='function'?ratioRankText(window.lastRatio):(window.lastRatio.title+' '+formatRatioValue(window.lastRatio.last.value)));
   }
+  if(window.lastAnns&&window.lastAnns.length){
+    bits.push('Flat spans: '+window.lastAnns.map(m=>m.label).join('; '));
+  }
   return bits.join('. ')+'.';
 }
 function xIntentUrl(text,url){
@@ -1496,6 +1500,17 @@ $('vt')&&$('vt').addEventListener('change',()=>{if($('vt').value)$('cy').checked
   draw(1);
 }));
 $('blw')&&$('blw').addEventListener('input',()=>{if($('blwVal'))$('blwVal').textContent=$('blw').value});
+$('annAdd')&&$('annAdd').addEventListener('click',()=>{
+  const a=$('annStart')&&$('annStart').value, b=$('annEnd')&&$('annEnd').value;
+  if(!a||!b){flashCopyStatus('Choose a start and end date',2500);return}
+  if(typeof addFlatSpan==='function') addFlatSpan(a,b);
+  draw(1);
+});
+$('annList')&&$('annList').addEventListener('click',e=>{
+  const btn=e.target.closest('[data-ann-remove]'); if(!btn) return;
+  if(typeof removeFlatSpan==='function') removeFlatSpan(+btn.dataset.annRemove);
+  draw(1);
+});
 $('chartoptions').addEventListener('change',e=>{if(e.target.id==='c'){if($('c').checked)setCustomDefaults();else{$('s').value=$('e').value=''}syncCustom()}
   if(e.target.id==='r'){$('c').checked=false;$('s').value=$('e').value='';syncCustom()}draw(1)});
 $('ca').addEventListener('change',()=>draw(1));

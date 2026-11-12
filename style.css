@@ -176,6 +176,13 @@ body.scout-ranges #rangeOpts{display:inline-flex}
 body.scout-ranges #scaleToggle,body.scout-ranges #markerBox,body.scout-ranges #ratioBox,body.scout-ranges #ratioLogBox{display:none}
 body.scout-ranges #main{height:560px}
 body.scout-ranges #chartWatermark{bottom:52px}
+
+#annBox{display:none;align-items:center;gap:8px;flex-wrap:wrap}
+body.page-advanced:not(.scout-view):not(.cycles-view):not(.loglog-view) #annBox{display:inline-flex}
+#annBox input[type="date"]{font-size:12px;width:9.2em}
+#annAdd{font:12px Verdana,Arial,sans-serif;padding:2px 8px;cursor:pointer}
+.ann-chip{display:inline-flex;align-items:center;gap:4px;background:var(--input-bg,#f3f3f3);border:1px solid var(--border,#ccc);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:normal}
+.ann-chip button{border:0;background:transparent;cursor:pointer;font-size:13px;line-height:1;color:inherit}
 .otd-wrap{padding:8px 12px 12px;border-top:1px solid var(--chart-border,#ccc)}
 .otd-table{margin:0;border-collapse:collapse;font-size:12px}
 .otd-table th,.otd-table td{border:1px solid var(--table-border,#ccc);padding:4px 10px;text-align:right}
@@ -205,6 +212,7 @@ body.page-classic #returnsOpts,
 body.page-classic #yearOpts,
 body.page-classic #otdOpts,
 body.page-classic #rangeOpts,
+body.page-classic #annBox,
 body.page-classic #scaleToggle [data-scale="loglog"],
 body.page-classic label:has(#da),
 body.page-classic #r optgroup,
