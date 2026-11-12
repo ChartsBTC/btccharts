@@ -22,3 +22,4 @@ Static bitcoincharts.com-style chart page.
 - Blended percentile panel in the Power Law view (`blp`, `blw`): combines each bar’s Price/Power Law and Years Ahead percentile ranks into a 0–100 score (default 50/50 weight, adjustable). Colored green to red, with the same percentile reference lines. Current score and both component ranks appear in the legend, caption, and CSV.
 - 3-hour candles are available in the interval list (aggregated from 1-hour data).
 - Halving-epoch candles (`vtgepoch`): one candle per halving era with an OHLC box and % change label. Yearly candles also show a % change label.
+- Dual axis (`da`): log scale on the left and linear scale on the right, on the same price chart.

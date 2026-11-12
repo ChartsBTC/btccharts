@@ -1,6 +1,6 @@
 const $=id=>document.getElementById(id);
 const LW=LightweightCharts;
-const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','cy','ca','cp','ch','cl','hv','ll','pl','ep','rp','rpl','vt','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw'];
+const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','da','cy','ca','cp','ch','cl','hv','ll','pl','ep','rp','rpl','vt','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw'];
 // populate indicator selects (only implemented ones, original naming)
 document.querySelectorAll('select.ind').forEach(s=>{s.innerHTML='<option value="">None</option>'+Object.entries(INDICATORS).map(([k,v])=>`<option value="${k}">${v.label.replace(/ \(.*/,'')}</option>`).join('')});
 
@@ -552,11 +552,19 @@ function render(interval, marks){
   if($('ll')&&$('ll').checked&&!($('cy')&&$('cy').checked)){renderLogLog(lastMarks);return}
   clearCharts();syncScaleToggle();
   $('charts').classList.toggle('has-volume',!!$('v').checked);
-  const isLog=$('l').checked&&!$('p').checked;
-  const main=mkChart($('main'),{localization:{priceFormatter:isLog?compact:v=>v<0?'':v.toLocaleString('en-US',{maximumFractionDigits:2})}});charts.push(main);
+  const dual=!!($('da')&&$('da').checked);
+  const isLog=dual||(($('l').checked&&!$('p').checked));
+  const main=mkChart($('main'),{
+    localization:{priceFormatter:isLog?compact:v=>v<0?'':v.toLocaleString('en-US',{maximumFractionDigits:2})},
+    leftPriceScale:{visible:dual,borderColor:'#ccc',scaleMargins:{top:.05,bottom:$('v').checked?.22:.05}},
+  });charts.push(main);
   const ps=main.priceScale('right');
-  ps.applyOptions({mode:$('p').checked?LW.PriceScaleMode.Percentage:$('l').checked?LW.PriceScaleMode.Logarithmic:LW.PriceScaleMode.Normal,
+  ps.applyOptions({mode:dual?LW.PriceScaleMode.Normal:($('p').checked?LW.PriceScaleMode.Percentage:$('l').checked?LW.PriceScaleMode.Logarithmic:LW.PriceScaleMode.Normal),
     scaleMargins:{top:.05,bottom:$('v').checked?.22:.05}});
+  if(dual){
+    main.priceScale('left').applyOptions({visible:true,mode:LW.PriceScaleMode.Logarithmic,borderColor:'#ccc',minimumWidth:80,
+      scaleMargins:{top:.05,bottom:$('v').checked?.22:.05}});
+  }
   const O=bars.map(b=>b.open),H=bars.map(b=>b.high),L=bars.map(b=>b.low),C=bars.map(b=>b.close);
   const t=$('t').value;
   let mainSeries=null;
@@ -578,6 +586,15 @@ function render(interval, marks){
     mainSeries=main.addLineSeries({color:'#1a237e',lineWidth:2});mainSeries.setData(ser(bars.map((_,i)=>f(i))))}
   else {mainSeries=main.addLineSeries({visible:false});mainSeries.setData(ser(C))} // keep scale with "None"
   if(mainSeries&&marks&&marks.length) mainSeries.setMarkers(marks);
+  if(dual&&mainSeries){
+    mainSeries.applyOptions({priceScaleId:'left'});
+    const lin=main.addLineSeries({
+      color:'#78909c',lineWidth:1,priceScaleId:'right',
+      priceLineVisible:false,lastValueVisible:true,title:'Linear',
+      priceFormat:{type:'price',precision:2,minMove:0.01},
+    });
+    lin.setData(bars.map(b=>({time:b.time,value:b.close})));
+  }
   setEpochLegend(epOn);
   const line=(arr,color,w=1,style=0)=>main.addLineSeries({color,lineWidth:w,lineStyle:style,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false}).setData(ser(arr));
   // price band
@@ -871,6 +888,11 @@ function chartTitleLine(){
   }else if($('r').value) days=+$('r').value||60;
   else if(bars.length) days=Math.max(1,(bars.at(-1).time-bars[0].time)/86400);
   const interval=$('i').value||autoInterval(days);
+  if($('da')&&$('da').checked){
+    const preset=(typeof isCyclePreset==='function'&&isCyclePreset($('r').value))
+      ?(($('r').value==='ccurrent'?'Current cycle':($('r').value||'').replace(/^c/,'').replace(/(\d{4})/, '$1 cycle'))+' · '):(($('r').value&&$('r').value!=='all'&&!$('c').checked)?$('r').selectedOptions[0]&&$('r').selectedOptions[0].text+' · ':'');
+    return `${name} · ${preset||''}${interval} · Dual axis (log + linear)`+(($('pl')&&$('pl').checked)?' · Power Law':'')+(typeof epochEnabled==='function'&&epochEnabled()?' · Epoch colors':'')+(window.lastRatio?' · '+window.lastRatio.title:'');
+  }
   const preset=(typeof isCyclePreset==='function'&&isCyclePreset($('r').value))
     ?($('r').selectedOptions[0]?$('r').selectedOptions[0].text+' · ':'')
     :'';
@@ -1155,7 +1177,7 @@ function shareCaption(){
   }else{
     const m=currentMarket();
     const market=m==='combinedUSD'?'combined history':marketLabel(m).replace(/ \(USD\)/,'');
-    const scale=($('ll')&&$('ll').checked)?'log-log':(($('p')&&$('p').checked)?'percentage':(($('l')&&$('l').checked)?'log':'linear'));
+    const scale=($('da')&&$('da').checked)?'dual axis (log + linear)':(($('ll')&&$('ll').checked)?'log-log':(($('p')&&$('p').checked)?'percentage':(($('l')&&$('l').checked)?'log':'linear')));
     let line='BTC/USD '+market+', '+scale;
     if($('pl')&&$('pl').checked) line+=' with power law fit';
     const marks=[];
