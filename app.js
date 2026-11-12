@@ -1,6 +1,6 @@
 const $=id=>document.getElementById(id);
 const LW=LightweightCharts;
-const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','cy','ca','cp','ch','cl','hv'];
+const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','cy','ca','cp','ch','cl','hv','ll'];
 // populate indicator selects (only implemented ones, original naming)
 document.querySelectorAll('select.ind').forEach(s=>{s.innerHTML='<option value="">None</option>'+Object.entries(INDICATORS).map(([k,v])=>`<option value="${k}">${v.label.replace(/ \(.*/,'')}</option>`).join('')});
 
@@ -61,14 +61,14 @@ async function priceEventMarkers(){
     const cycles=await loadDetectedCycles();
     for(const c of cycles){
       if($('ch').checked && c.high.time>=t0 && c.high.time<=t1){
-        add(c.high.time,{position:'aboveBar',color:'#2e7d32',shape:'arrowDown',text:'H '+c.high.date+' $'+usd(c.high.price)});
+        add(c.high.time,{position:'aboveBar',color:'#2e7d32',shape:'arrowDown',text:'H '+c.high.date+' $'+usd(c.high.price),price:c.high.price});
       }
       if($('cl').checked){
         const lows=[{...c.startLow,soFar:false}];
         if(c.endLow && c.endLow.time!==c.startLow.time) lows.push({...c.endLow,soFar:!!c.lowSoFar});
         for(const lo of lows){
           if(lo.time<t0||lo.time>t1) continue;
-          add(lo.time,{position:'belowBar',color:'#c62828',shape:'arrowUp',text:(lo.soFar?'L so far ':'L ')+lo.date+' $'+usd(lo.price)});
+          add(lo.time,{position:'belowBar',color:'#c62828',shape:'arrowUp',text:(lo.soFar?'L so far ':'L ')+lo.date+' $'+usd(lo.price),price:lo.price});
         }
       }
     }
@@ -78,7 +78,7 @@ async function priceEventMarkers(){
       if(h.time<t0-40*86400||h.time>t1+40*86400) continue;
       const b=nearestBar(h.time);
       if(!b||Math.abs(b.time-h.time)>40*86400) continue;
-      add(h.time,{position:'aboveBar',color:'#6a1b9a',shape:'circle',text:'Halving '+h.label+' $'+usd(b.close)});
+      add(h.time,{position:'aboveBar',color:'#6a1b9a',shape:'circle',text:'Halving '+h.label+' $'+usd(b.close),price:b.close});
     }
   }
   return marks;
@@ -90,7 +90,10 @@ function mkChart(el,opts={}){return LW.createChart(el,{autoSize:true,layout:{bac
   grid:{vertLines:{color:'#eee'},horzLines:{color:'#eee'}},rightPriceScale:{borderColor:'#ccc'},
   timeScale:{borderColor:'#ccc',timeVisible:true,secondsVisible:false,minBarSpacing:0.05},crosshair:{mode:0},...opts})}
 const ser=(arr)=>bars.map((b,i)=>arr[i]==null||!isFinite(arr[i])?{time:b.time}:{time:b.time,value:arr[i]});
-function clearCharts(){charts.forEach(c=>c.remove());charts=[];$('subs').innerHTML=''}
+let uplot=null,lastMarks=[];
+const GENESIS=Date.UTC(2009,0,3)/1000;
+const daysSinceGenesis=t=>(t-GENESIS)/86400;
+function clearCharts(){charts.forEach(c=>c.remove());charts=[];if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view')}
 
 async function draw(pushUrl){
   const hash=buildHash();
@@ -259,8 +262,121 @@ function renderCycles(align, mode){
 }
 // compact price labels for log scale: 1k, 10k, 100k, 2.5k ...
 function compact(v){const a=Math.abs(v);if(a>=1e6)return +(v/1e6).toPrecision(3)+'M';if(a>=1e3)return +(v/1e3).toPrecision(3)+'k';return +v.toPrecision(3)+''}
-function syncScaleToggle(){document.querySelectorAll('#scaleToggle button').forEach(b=>b.classList.toggle('on',(b.dataset.l==='1')===$('l').checked))}
+function syncScaleToggle(){
+  const ll=$('ll')&&$('ll').checked&&!($('cy')&&$('cy').checked);
+  const log=!$('p').checked&&$('l').checked&&!ll;
+  const linear=!ll&&!log&&!($('p')&&$('p').checked);
+  document.querySelectorAll('#scaleToggle button').forEach(b=>{
+    const m=b.dataset.scale||(b.dataset.l==='1'?'log':'linear');
+    b.classList.toggle('on',m==='loglog'?ll:m==='log'?log:linear);
+  });
+  document.body.classList.toggle('loglog-view',!!ll);
+}
+
+function renderLogLog(marks){
+  clearCharts();syncScaleToggle();
+  $('charts').classList.remove('has-volume');
+  document.body.classList.add('loglog-view');
+  const host=$('main');
+  const w=Math.max(320,host.clientWidth||800), h=Math.max(240,host.clientHeight||480);
+  const xs=[],ys=[],barAt=[];
+  for(const b of bars){
+    const d=daysSinceGenesis(b.time);
+    if(!(d>0)||!(b.close>0)) continue;
+    xs.push(d); ys.push(b.close); barAt.push(b);
+  }
+  if(xs.length<2){status('Not enough points for a log-log chart.');return}
+  const opts={
+    width:w,height:h,pxAlign:0,
+    cursor:{show:true,drag:{x:true,y:true,setScale:true},points:{show:true}},
+    legend:{show:false},
+    scales:{x:{time:false,distr:3,log:10},y:{distr:3,log:10}},
+    axes:[
+      {scale:'x',stroke:'#333',grid:{stroke:'#eee'},ticks:{stroke:'#ccc'},size:40,space:10,font:'11px Verdana,Arial,sans-serif',
+        splits:(u,axisIdx,min,max)=>{
+          const out=[];
+          const dataMaxY=new Date((GENESIS+xs[xs.length-1]*86400)*1000).getUTCFullYear();
+          const y0=new Date((GENESIS+Math.max(1,min)*86400)*1000).getUTCFullYear();
+          const y1=Math.min(dataMaxY, new Date((GENESIS+max*86400)*1000).getUTCFullYear());
+          const step=y1-y0>10?2:1;
+          for(let y=y0;y<=y1;y+=step){
+            const d=(Date.UTC(y,0,1)/1000-GENESIS)/86400;
+            if(d>=min&&d<=max&&d>0) out.push(d);
+          }
+          return out;
+        },
+        values:(u,splits)=>splits.map(()=>'')},
+      {scale:'y',stroke:'#333',grid:{stroke:'#eee'},ticks:{stroke:'#ccc'},size:64,font:'11px Verdana,Arial,sans-serif',
+        values:(u,splits)=>splits.map(v=>v>0?(v>=1000?compact(v):String(+v.toPrecision(3))):'')},
+    ],
+    series:[
+      {label:'Days'},
+      {label:'USD',stroke:'#1a237e',width:2,points:{show:xs.length<=100},
+        value:(u,v)=>v==null?'':'$'+(v>=100?Number(v).toLocaleString('en-US',{maximumFractionDigits:0}):(+v.toPrecision(3)))},
+    ],
+    hooks:{
+      setCursor:[u=>{
+        const i=u.cursor.idx;
+        if(i==null||!barAt[i]){$('legend').textContent='';return}
+        const b=barAt[i], d=xs[i];
+        $('legend').textContent=isoUTC(b.time)+'  ·  day '+d.toFixed(0)+' since genesis  ·  O '+b.open+' H '+b.high+' L '+b.low+' C '+b.close;
+      }],
+      draw:[u=>{
+        const list=marks||lastMarks||[];
+        if(!list.length) return;
+        const ctx=u.ctx, pr=u.pxRatio||window.devicePixelRatio||1;
+        ctx.save();
+        ctx.font=11*pr+'px Verdana,Arial,sans-serif';
+        ctx.lineWidth=Math.max(1,pr);
+        for(const m of list){
+          const b=nearestBar(m.time); if(!b) continue;
+          const d=daysSinceGenesis(b.time), px=m.price||b.close;
+          if(!(d>0)||!(px>0)) continue;
+          if(d<(u.scales.x.min||0)||d>(u.scales.x.max||Infinity)) continue;
+          const x=u.valToPos(d,'x',true), y=u.valToPos(px,'y',true);
+          ctx.fillStyle=m.color||'#333';
+          ctx.beginPath(); ctx.arc(x,y,3.5*pr,0,Math.PI*2); ctx.fill();
+          ctx.strokeStyle='rgba(255,255,255,0.85)';
+          ctx.lineWidth=3*pr;
+          ctx.strokeText(m.text,x+6*pr,y+(m.position==='belowBar'?12: -6)*pr);
+          ctx.fillStyle=m.color||'#333';
+          ctx.fillText(m.text,x+6*pr,y+(m.position==='belowBar'?12: -6)*pr);
+        }
+        // Year labels along the log-x axis (uPlot hides later log ticks as “too close”).
+        const min=u.scales.x.min, max=u.scales.x.max;
+        if(min!=null&&max!=null){
+          ctx.font=(11*pr)+'px Verdana,Arial,sans-serif';
+          ctx.fillStyle='#333';
+          ctx.textAlign='center';
+          ctx.textBaseline='top';
+          const axisY=(u.bbox.top+u.bbox.height)+8*pr;
+          const dataMaxY=new Date((GENESIS+xs[xs.length-1]*86400)*1000).getUTCFullYear();
+          const y0=new Date((GENESIS+Math.max(1,min)*86400)*1000).getUTCFullYear();
+          const y1=Math.min(dataMaxY, new Date((GENESIS+max*86400)*1000).getUTCFullYear());
+          const step=y1-y0>10?2:1;
+          for(let y=y0;y<=y1;y+=step){
+            const d=(Date.UTC(y,0,1)/1000-GENESIS)/86400;
+            if(d<min||d>max||!(d>0)) continue;
+            ctx.fillText(String(y),u.valToPos(d,'x',true),axisY);
+          }
+        }
+        ctx.restore();
+      }],
+    },
+  };
+  uplot=new uPlot(opts,[xs,ys],host);
+  if(window._llRo) window._llRo.disconnect();
+  window._llRo=new ResizeObserver(()=>{
+    if(!uplot) return;
+    const nw=host.clientWidth, nh=host.clientHeight;
+    if(nw&&nh) uplot.setSize({width:nw,height:nh});
+  });
+  window._llRo.observe(host);
+}
+
 function render(interval, marks){
+  lastMarks=marks||[];
+  if($('ll')&&$('ll').checked&&!($('cy')&&$('cy').checked)){renderLogLog(lastMarks);return}
   clearCharts();syncScaleToggle();
   $('charts').classList.toggle('has-volume',!!$('v').checked);
   const isLog=$('l').checked&&!$('p').checked;
@@ -369,7 +485,7 @@ function isMobileUa(){
   return isLikelyIOS()||/Mobi|Android/i.test(navigator.userAgent);
 }
 function chartTitleLine(){
-  const scale=$('p').checked?'Percentage':($('l').checked?'Log':'Linear');
+  const scale=($('ll')&&$('ll').checked)?'Log-Log':($('p').checked?'Percentage':($('l').checked?'Log':'Linear'));
   if($('cy').checked){
     const align={low:'low',high:'high',halving:'halving date',calendar:'4-year calendar'}[$('ca').value]||$('ca').value;
     const mode={usd:'stacked USD',low:'multiple of low',high:'% of cycle high',day0:'relative to day 0'}[$('cp').value]||$('cp').value;
@@ -435,8 +551,24 @@ function waitPaint(){
   return new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
 }
 async function composeChartImage(){
-  if(!charts.length) throw new Error('No chart to export');
   await waitPaint();
+  if(uplot){
+    const cv=uplot.ctx.canvas;
+    const cssW=uplot.width||cv.clientWidth||cv.width;
+    const dpr=cv.width/Math.max(1,cssW);
+    const width=cv.width, pad=Math.round(16*dpr), title=chartTitleLine();
+    const titleSize=Math.round(15*dpr), titleH=Math.round(28*dpr);
+    const canvas=document.createElement('canvas');
+    canvas.width=width; canvas.height=pad+titleH+cv.height+pad;
+    const ctx=canvas.getContext('2d');
+    ctx.fillStyle='#fff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle='#222'; ctx.font=titleSize+'px Verdana,Arial,sans-serif'; ctx.textBaseline='top';
+    ctx.fillText(title,pad,pad);
+    ctx.drawImage(cv,0,pad+titleH);
+    paintWatermark(ctx,0,pad+titleH,width,cv.height,dpr,{cycles:true});
+    return canvas;
+  }
+  if(!charts.length) throw new Error('No chart to export');
   const panes=charts.map((c,i)=>{
     const cv=c.takeScreenshot();
     const el=c.chartElement();
@@ -547,8 +679,12 @@ window.composeChartImage=composeChartImage;
 window.exportChartPng=async()=>canvasToBlob(await composeChartImage());
 
 // ---- events ----
-document.querySelectorAll('#scaleToggle button').forEach(b=>b.onclick=()=>{const want=b.dataset.l==='1';
-  if($('l').checked===want&&!$('p').checked)return;$('l').checked=want;$('p').checked=false;draw(1)});
+document.querySelectorAll('#scaleToggle button').forEach(b=>b.onclick=()=>{
+  const mode=b.dataset.scale||(b.dataset.l==='1'?'log':'linear');
+  if(mode==='loglog'){$('ll').checked=true;$('l').checked=false;$('p').checked=false}
+  else if(mode==='log'){$('ll').checked=false;$('l').checked=true;$('p').checked=false}
+  else {$('ll').checked=false;$('l').checked=false;$('p').checked=false}
+  draw(1)});
 document.querySelectorAll('#viewToggle button').forEach(b=>b.onclick=()=>{const want=b.dataset.cy==='1';
   if($('cy').checked===want)return;$('cy').checked=want;if(want)$('p').checked=false;draw(1)});
 $('chartoptions').addEventListener('change',e=>{if(e.target.id==='c'){if($('c').checked)setCustomDefaults();else{$('s').value=$('e').value=''}syncCustom()}

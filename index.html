@@ -1,6 +1,6 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><title>Bitcoin Charts / Charts</title>
-<link rel="stylesheet" href="style.css"></head>
+<link rel="stylesheet" href="vendor/uPlot.min.css"><link rel="stylesheet" href="style.css"></head>
 <body>
 <div id="header"><div class="wrap"><a href="#" id="logo">Bitcoin Charts</a>
 <ul id="menu"><li><a class="active">Charts</a></li></ul>
@@ -57,7 +57,7 @@
 </form>
 <div id="content_chart" class="wrap">
  <p class="info">
-  <span id="scaleToggle" class="seg" role="group" aria-label="Price scale"><button type="button" data-l="0">Linear</button><button type="button" data-l="1">Log</button></span>
+  <span id="scaleToggle" class="seg" role="group" aria-label="Price scale"><button type="button" data-scale="linear">Linear</button><button type="button" data-scale="log">Log</button><button type="button" data-scale="loglog">Log-Log</button></span>
   <span id="viewToggle" class="seg" role="group" aria-label="View"><button type="button" data-cy="0">Price</button><button type="button" data-cy="1">Cycles</button></span>
   <span id="markerBox" class="price-only">
     <label><input type="checkbox" id="ch">Cycle highs</label>
@@ -81,6 +81,7 @@
     </select>
   </label>
   <input type="checkbox" id="cy" hidden>
+  <input type="checkbox" id="ll" hidden>
   <a href="#" id="getPermalink">Link to this chart</a> · <a href="#" id="copyImage">Copy image</a> · <a href="#" id="downloadPng">Download PNG</a> · <a href="#" id="larger">Larger chart</a> <span id="copyStatus" hidden></span>
   <span id="legend"></span>
  </p>
@@ -93,6 +94,7 @@
  <div id="tableWrap" hidden><table class="data" id="chart_table"><thead></thead><tbody></tbody></table></div>
 </div>
 <script src="vendor/lightweight-charts.js"></script>
+<script src="vendor/uPlot.iife.min.js"></script>
 <script src="indicators.js"></script>
 <script src="cycles.js"></script>
 <script src="data.js"></script>

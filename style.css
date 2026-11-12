@@ -68,3 +68,8 @@ body.cycles-view #charts.has-volume #chartWatermark{bottom:38px}
 #markerBox{display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-weight:bold;color:#333}
 #markerBox label{display:inline-flex;align-items:center;gap:4px;font-weight:normal;cursor:pointer}
 body.cycles-view #markerBox{display:none}
+
+body.cycles-view #scaleToggle [data-scale="loglog"]{display:none}
+body.loglog-view #chartWatermark{left:72px;bottom:38px}
+#main .uplot,#main .u-wrap{width:100%;height:100%}
+#main .u-legend{display:none}
