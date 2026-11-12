@@ -106,3 +106,7 @@ body.scout-drawdown #scaleToggle{display:none}
 body.scout-ath #main{height:340px}
 body.scout-ath .sub.scout-panel{height:200px}
 body.scout-ath #scaleToggle{display:none}
+
+body.scout-sats #main{height:480px}
+body.scout-sats #scaleToggle{display:none}
+.chart-overlay{position:absolute;inset:0;pointer-events:none;z-index:8}

@@ -24,6 +24,7 @@ function syncViewToggle(){
   document.body.classList.toggle('scout-powerlaw',vt==='powerlaw' && !on);
   document.body.classList.toggle('scout-drawdown',vt==='drawdown' && !on);
   document.body.classList.toggle('scout-ath',vt==='ath' && !on);
+  document.body.classList.toggle('scout-sats',vt==='sats' && !on);
   document.querySelectorAll('#viewToggle button').forEach(b=>b.classList.toggle('on',(b.dataset.cy==='1')===on && !vt));
   if(!vt && !on) document.querySelectorAll('#viewToggle button').forEach(b=>b.classList.toggle('on',(b.dataset.cy==='1')===false));
   $('main').classList.toggle('cycles',on);
@@ -273,7 +274,7 @@ function drawPowerLawUplot(u,xs,barAt){
 }
 
 let plSeries={};
-function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if(typeof clearScoutPlots==='function')clearScoutPlots();if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view','scout-view','scout-powerlaw','scout-drawdown','scout-ath');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null}
+function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if(typeof clearScoutPlots==='function')clearScoutPlots();if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view','scout-view','scout-powerlaw','scout-drawdown','scout-ath','scout-sats');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null}
 
 async function draw(pushUrl){
   const hash=buildHash();
@@ -612,7 +613,7 @@ function clear_table(){
   if($('loadRaw')) $('loadRaw').textContent='Show data';
 }
 function showTable(){
-  if($('cy').checked) fillCycleTable(); else if(typeof scoutView==='function'&&scoutView()==='powerlaw') fillPowerLawTable(); else if(scoutView()==='drawdown') fillDrawdownTable(); else if(scoutView()==='ath') fillAthTable(); else fillPriceTable();
+  if($('cy').checked) fillCycleTable(); else if(typeof scoutView==='function'&&scoutView()==='powerlaw') fillPowerLawTable(); else if(scoutView()==='drawdown') fillDrawdownTable(); else if(scoutView()==='ath') fillAthTable(); else if(scoutView()==='sats') fillSatsTable(); else fillPriceTable();
   tableOpen=true;
   $('tableWrap').hidden=false;
   $('downloadCsv').hidden=false;
@@ -656,6 +657,17 @@ function fillCycleTable(){
     }
   }
   $('chart_table').tBodies[0].innerHTML=parts.join('');
+}
+function fillSatsTable(){
+  const pts=window.lastScout&&window.lastScout.points, head=['Date','Close','Sats per dollar','Epoch'];
+  setTableHead(head); tableCsv=[head.slice()];
+  const rows=[];
+  for(const p of (pts||[]).slice().reverse()){
+    const rec=[isoUTC(p.time),String(p.close),String(Math.round(p.value)),String(epochIndex(p.time)+1)];
+    tableCsv.push(rec);
+    rows.push('<tr>'+rec.map(c=>'<td>'+c+'</td>').join('')+'</tr>');
+  }
+  $('chart_table').tBodies[0].innerHTML=rows.join('');
 }
 function fillAthTable(){
   const ser=window.lastScout&&window.lastScout.series, between=window.lastScout&&window.lastScout.between, head=['Date','Close','New ATH','Days since previous ATH'];
@@ -717,10 +729,10 @@ function isMobileUa(){
 }
 function chartTitleLine(){
   const vt=($('vt')&&$('vt').value)||'';
-  if(vt==='powerlaw'||vt==='drawdown'||vt==='ath'){
+  if(vt==='powerlaw'||vt==='drawdown'||vt==='ath'||vt==='sats'){
     const m=currentMarket();
     const name=m==='combinedUSD'?'BTC/USD Combined':('BTC/USD '+marketLabel(m).replace(/ \(USD\)/,''));
-    const label={powerlaw:'Power Law',drawdown:'Drawdown from ATH',ath:'ATHs and days between'}[vt];
+    const label={powerlaw:'Power Law',drawdown:'Drawdown from ATH',ath:'ATHs and days between',sats:'Sats per dollar'}[vt];
     return name+' · '+(($('i').value)||'Daily')+' · '+label;
   }
   const scale=($('ll')&&$('ll').checked)?'Log-Log':($('p').checked?'Percentage':($('l').checked?'Log':'Linear'));
@@ -823,7 +835,8 @@ async function composeChartImage(){
     const host=el&&el.parentElement;
     const lbl=i>0&&host?host.querySelector('.lbl'):null;
     const cssW=(el&&el.clientWidth)||cv.width;
-    return {cv,label:lbl?lbl.textContent:'',cssW};
+    const overlay=el&&el.querySelector('canvas.chart-overlay');
+    return {cv,label:lbl?lbl.textContent:'',cssW,overlay};
   });
   const dpr=panes[0].cv.width/Math.max(1,panes[0].cssW);
   const width=Math.max(...panes.map(p=>p.cv.width));
@@ -872,6 +885,7 @@ async function composeChartImage(){
   for(const [i,p] of panes.entries()){
     const x=Math.round((width-p.cv.width)/2);
     ctx.drawImage(p.cv,x,y);
+    if(p.overlay) ctx.drawImage(p.overlay,x,y,p.cv.width,p.cv.height);
     if(p.label){
       ctx.font=`${Math.round(11*dpr)}px Verdana,Arial,sans-serif`;
       ctx.textBaseline='top';
@@ -886,7 +900,7 @@ async function composeChartImage(){
     y+=p.cv.height;
   }
   paintWatermark(ctx,0,mainY,width,mainH,dpr,{cycles:!!$('cy').checked,volume:!$('cy').checked&&!!$('v').checked});
-  if(typeof epochEnabled==='function'&&epochEnabled()&&typeof paintEpochLegend==='function'&&!($('cy')&&$('cy').checked)){
+  if(typeof paintEpochLegend==='function'&&$('epochLegend')&&!$('epochLegend').hidden&&!($('cy')&&$('cy').checked)){
     paintEpochLegend(ctx,pad+Math.round(8*dpr),mainY+Math.round(10*dpr),dpr);
   }
   return canvas;
@@ -973,6 +987,15 @@ function shareCaption(){
       const last=ser.aths.at(-1);
       const gap=window.lastScout.between&&window.lastScout.between.at(-1);
       bits.push(ser.aths.length+' closing ATHs, last $'+usd(last.price)+' on '+isoUTC(last.time)+(gap?', '+Math.round(gap.value)+' days since':'') );
+    }
+    return bits.join('. ')+'.';
+  }
+  if(vt==='sats'){
+    bits.push('Satoshi per US dollar, log scale, colored by halving epoch');
+    const pts=window.lastScout&&window.lastScout.points;
+    if(pts&&pts.length){
+      const last=pts.at(-1);
+      bits.push('Currently '+formatSats(last.value)+' ($'+usd(last.close)+')');
     }
     return bits.join('. ')+'.';
   }

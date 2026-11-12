@@ -521,6 +521,7 @@ function renderScout(kind){
   if(kind==='powerlaw'){renderPowerLawView();return true}
   if(kind==='drawdown'){renderDrawdownView();return true}
   if(kind==='ath'){renderAthView();return true}
+  if(kind==='sats'){renderSatsView();return true}
   return false;
 }
 
@@ -662,5 +663,102 @@ function renderAthView(){
     return d?isoUTC(t)+'  ·  '+Math.round(d.value)+' days since previous ATH':'';
   });
   syncScoutLw();
+}
+
+
+
+function formatSats(n){
+  return Math.round(n).toLocaleString('en-US')+' sats';
+}
+function attachChartOverlay(chart, paint){
+  const host=chart.chartElement();
+  if(!host) return null;
+  host.style.position='relative';
+  const c=document.createElement('canvas');
+  c.className='chart-overlay';
+  host.appendChild(c);
+  const redraw=()=>{
+    const dpr=window.devicePixelRatio||1;
+    const w=host.clientWidth, h=host.clientHeight;
+    if(!w||!h) return;
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    c.style.width=w+'px'; c.style.height=h+'px';
+    const ctx=c.getContext('2d');
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    paint(ctx,chart,w,h);
+  };
+  chart.timeScale().subscribeVisibleLogicalRangeChange(redraw);
+  new ResizeObserver(redraw).observe(host);
+  setTimeout(redraw,60);
+  setTimeout(redraw,250);
+  return {canvas:c,redraw};
+}
+
+function renderSatsView(){
+  clearCharts();
+  document.body.classList.add('scout-view','scout-sats');
+  $('charts').classList.remove('has-volume');
+  const pts=bars.filter(b=>b&&b.close>0).map(b=>({time:b.time,value:1e8/b.close,close:b.close}));
+  window.lastScout={kind:'sats',points:pts};
+  const main=$('main');
+  main.innerHTML='';
+  $('subs').innerHTML='';
+  const fmt=v=>{
+    if(v==null||!isFinite(v)||v<=0) return '';
+    if(v>=1000) return Math.round(v).toLocaleString('en-US');
+    return String(+v.toPrecision(3));
+  };
+  const ch=mkChart(main,{localization:{priceFormatter:fmt}});
+  charts.push(ch);
+  ch.priceScale('right').applyOptions({mode:LW.PriceScaleMode.Logarithmic,scaleMargins:{top:.1,bottom:.1},minimumWidth:96});
+  const ss=addEpochLineSeries(ch,pts,{lineWidth:2,lastValueVisible:true});
+  setEpochLegend(true);
+  const series=ss[ss.length-1]||ss[0];
+  const labels=[];
+  const t0=pts[0].time, t1=pts.at(-1).time;
+  for(const h of HALVINGS){
+    if(h.time<t0-40*86400||h.time>t1+40*86400) continue;
+    const b=nearestBar(h.time);
+    if(!b||!(b.close>0)) continue;
+    labels.push({time:b.time,sats:1e8/b.close,text:formatSats(1e8/b.close),kind:'halving'});
+  }
+  const last=pts.at(-1);
+  labels.push({time:last.time,sats:last.value,text:formatSats(last.value),kind:'current'});
+  window.lastScout.labels=labels;
+  attachChartOverlay(ch,(ctx,chart,w,h)=>{
+    if(!series) return;
+    ctx.save();
+    for(const lab of labels){
+      const x=chart.timeScale().timeToCoordinate(lab.time);
+      const y=series.priceToCoordinate(lab.sats);
+      if(x==null) continue;
+      ctx.strokeStyle='#e53935';
+      ctx.lineWidth=1.25;
+      ctx.setLineDash([5,4]);
+      ctx.beginPath();
+      ctx.moveTo(x,0);
+      ctx.lineTo(x,h);
+      ctx.stroke();
+      if(y==null) continue;
+      ctx.setLineDash([]);
+      ctx.font=(lab.kind==='current'?'bold ':'')+'12px Verdana,Arial,sans-serif';
+      ctx.fillStyle=lab.kind==='current'?'#111':'#666';
+      ctx.textBaseline='bottom';
+      const tw=ctx.measureText(lab.text).width;
+      let tx=x+8;
+      if(lab.kind==='current'||tx+tw>w-8) tx=x-tw-8;
+      ctx.strokeStyle='rgba(255,255,255,0.85)';
+      ctx.lineWidth=3;
+      ctx.strokeText(lab.text,tx,y-4);
+      ctx.fillText(lab.text,tx,y-4);
+    }
+    ctx.restore();
+  });
+  hookLegend(ch,t=>{
+    const p=pts.find(x=>x.time===t); if(!p) return '';
+    return isoUTC(t)+'  ·  $'+usd(p.close)+'  ·  '+formatSats(p.value);
+  });
+  ch.timeScale().fitContent();
+  setTimeout(()=>ch.timeScale().fitContent(),50);
 }
 
