@@ -1,5 +1,21 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>Bitcoin Charts / Charts</title>
+<html lang="en"><head><meta charset="utf-8">
+<title>Bitcoin Charts / Charts</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="BTC/USD combined history — log, log-log, cycles, and power-law charts.">
+<meta property="og:title" content="Bitcoin Charts">
+<meta property="og:description" content="BTC/USD combined history — log, log-log, cycles, and power-law charts.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://chartsbtc.github.io/btccharts/">
+<meta property="og:image" content="https://chartsbtc.github.io/btccharts/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:site_name" content="Bitcoin Charts">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Bitcoin Charts">
+<meta name="twitter:description" content="BTC/USD combined history — log, log-log, cycles, and power-law charts.">
+<meta name="twitter:image" content="https://chartsbtc.github.io/btccharts/og-image.png">
+<link rel="canonical" href="https://chartsbtc.github.io/btccharts/">
 <link rel="stylesheet" href="vendor/uPlot.min.css"><link rel="stylesheet" href="style.css"></head>
 <body>
 <div id="header"><div class="wrap"><a href="#" id="logo">Bitcoin Charts</a>
@@ -56,7 +72,7 @@
   <label><input type="checkbox" id="p">Percentage Scale</label></div>
 </form>
 <div id="content_chart" class="wrap">
- <p class="info">
+ <div class="info">
   <span id="scaleToggle" class="seg" role="group" aria-label="Price scale"><button type="button" data-scale="linear">Linear</button><button type="button" data-scale="log">Log</button><button type="button" data-scale="loglog">Log-Log</button></span>
   <span id="viewToggle" class="seg" role="group" aria-label="View"><button type="button" data-cy="0">Price</button><button type="button" data-cy="1">Cycles</button></span>
   <span id="markerBox" class="price-only">
@@ -83,9 +99,9 @@
   </label>
   <input type="checkbox" id="cy" hidden>
   <input type="checkbox" id="ll" hidden>
-  <a href="#" id="getPermalink">Link to this chart</a> · <a href="#" id="copyImage">Copy image</a> · <a href="#" id="downloadPng">Download PNG</a> · <a href="#" id="larger">Larger chart</a> <span id="copyStatus" hidden></span>
+  <a href="#" id="getPermalink">Link to this chart</a> · <a href="#" id="copyImage">Copy image</a> · <span class="share-wrap"><a href="#" id="postToX" aria-haspopup="true" aria-expanded="false">Post to X</a><div id="shareMenu" hidden role="menu"><button type="button" role="menuitem" data-share="link">Post link</button><button type="button" role="menuitem" data-share="image">Post image</button></div></span> · <a href="#" id="downloadPng">Download PNG</a> · <a href="#" id="larger">Larger chart</a> <span id="copyStatus" hidden></span>
   <span id="legend"></span>
- </p>
+ </div>
  <div id="cycleLegend" class="cycle-only"></div>
  <div id="plLegend" hidden></div>
  <div id="permalinkbox" hidden>Use this link to bookmark or share this chart. Select "Custom Time" for a permanent link to a specific date.<br><input id="permalink" readonly></div>

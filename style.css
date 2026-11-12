@@ -24,7 +24,7 @@ body.wide #content_chart{max-width:none}
 #chartoptions{flex-wrap:wrap}
 .col{flex:1 1 150px;min-width:140px}
 #header .wrap{flex-wrap:wrap;gap:10px 30px}
-.info{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px}
+.info{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;position:relative;z-index:40;overflow:visible}
 #legend{float:none;margin-left:auto}
 #cycleAlignBox,#cyclePriceBox{font-weight:bold;color:#333}
 #cycleAlignBox select,#cyclePriceBox select{font-size:12px;max-width:220px;margin-left:4px}
@@ -76,3 +76,8 @@ body.loglog-view #chartWatermark{left:72px;bottom:52px}
 
 #plLegend{margin:0 0 8px;font:12px/1.4 Verdana,Arial,sans-serif;color:#b86a00}
 body.cycles-view #plLegend{display:none}
+
+.share-wrap{position:relative;display:inline-block;vertical-align:middle}
+#shareMenu{position:absolute;left:0;top:calc(100% + 4px);z-index:30;min-width:148px;padding:4px 0;background:#fff;border:1px solid #ccc;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+#shareMenu button{display:block;width:100%;margin:0;border:0;background:none;text-align:left;font:12px/1.4 Verdana,Arial,sans-serif;color:#105cb6;padding:6px 12px;cursor:pointer}
+#shareMenu button:hover,#shareMenu button:focus{background:#f3f3f3;outline:none}

@@ -669,11 +669,11 @@ function downloadBlob(blob,name){
   a.click();
   setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);
 }
-function flashCopyStatus(msg){
+function flashCopyStatus(msg,ms){
   const el=$('copyStatus'); if(!el)return;
   el.textContent=msg; el.hidden=false;
   clearTimeout(flashCopyStatus._t);
-  flashCopyStatus._t=setTimeout(()=>{el.hidden=true},2500);
+  flashCopyStatus._t=setTimeout(()=>{el.hidden=true},ms||2500);
 }
 function paintWatermark(ctx,x,y,w,h,dpr,opts){
   opts=opts||{};
@@ -831,6 +831,105 @@ async function downloadChartPng(e){
 window.composeChartImage=composeChartImage;
 window.exportChartPng=async()=>canvasToBlob(await composeChartImage());
 
+
+const PUBLIC_CHART_BASE='https://chartsbtc.github.io/btccharts/';
+function currentPermalink(){
+  return PUBLIC_CHART_BASE+'#'+buildHash();
+}
+function shareCaption(){
+  const bits=[];
+  if($('cy')&&$('cy').checked){
+    const align={low:'cycle low',high:'cycle high',halving:'halving date',calendar:'4-year calendar'}[$('ca').value]||$('ca').value;
+    const mode={usd:'stacked USD',low:'multiple of cycle low',high:'% of cycle high',day0:'relative to day 0'}[$('cp').value]||$('cp').value;
+    bits.push('Bitcoin cycles aligned by '+align+', '+mode+(($('l')&&$('l').checked)?', log':''));
+  }else{
+    const m=currentMarket();
+    const market=m==='combinedUSD'?'combined history':marketLabel(m).replace(/ \(USD\)/,'');
+    const scale=($('ll')&&$('ll').checked)?'log-log':(($('p')&&$('p').checked)?'percentage':(($('l')&&$('l').checked)?'log':'linear'));
+    let line='BTC/USD '+market+', '+scale;
+    if($('pl')&&$('pl').checked) line+=' with power law fit';
+    const marks=[];
+    if($('ch')&&$('ch').checked) marks.push('cycle highs');
+    if($('cl')&&$('cl').checked) marks.push('cycle lows');
+    if($('hv')&&$('hv').checked) marks.push('halvings');
+    if(marks.length) line+=' ('+marks.join(', ')+')';
+    bits.push(line);
+  }
+  if($('pl')&&$('pl').checked&&window.lastPowerFit){
+    const f=window.lastPowerFit;
+    bits.push('log₁₀(price) = '+f.a.toFixed(3)+' + '+f.b.toFixed(3)+'·log₁₀(days), R²='+f.r2.toFixed(3));
+  }
+  if(bars.length){
+    const last=bars.at(-1);
+    bits.push('Last $'+Number(last.close).toLocaleString('en-US',{maximumFractionDigits:0})+' on '+isoUTC(last.time));
+  }
+  return bits.join('. ')+'.';
+}
+function xIntentUrl(text,url){
+  const u=new URL('https://x.com/intent/post');
+  if(text) u.searchParams.set('text',text);
+  if(url) u.searchParams.set('url',url);
+  return u.toString();
+}
+function openXIntent(text,url){
+  window.open(xIntentUrl(text,url),'_blank','noopener,noreferrer');
+}
+function shareMenuEl(){return $('shareMenu')}
+function setShareMenu(open){
+  const menu=shareMenuEl(), btn=$('postToX');
+  if(!menu||!btn) return;
+  menu.hidden=!open;
+  btn.setAttribute('aria-expanded',open?'true':'false');
+}
+function toggleShareMenu(e){
+  if(e) e.preventDefault();
+  const menu=shareMenuEl(); if(!menu) return;
+  setShareMenu(menu.hidden);
+}
+function postLinkToX(e){
+  if(e) e.preventDefault();
+  setShareMenu(false);
+  openXIntent(shareCaption(), currentPermalink());
+}
+async function postImageToX(e){
+  if(e) e.preventDefault();
+  setShareMenu(false);
+  const caption=shareCaption(), url=currentPermalink();
+  let file=null;
+  try{
+    const canvas=await composeChartImage();
+    const blob=await canvasToBlob(canvas);
+    file=new File([blob],exportFilename(),{type:'image/png'});
+  }catch(err){
+    flashCopyStatus('Export failed');
+    openXIntent(caption,url);
+    return;
+  }
+  if(isMobileUa()&&typeof navigator.share==='function'){
+    try{
+      const payload={files:[file],title:chartTitleLine(),text:caption,url};
+      if(!navigator.canShare||navigator.canShare({files:[file]})){
+        await navigator.share(payload);
+        return;
+      }
+    }catch(err){
+      if(err&&err.name==='AbortError') return;
+    }
+  }
+  try{
+    if(!navigator.clipboard||!window.ClipboardItem) throw new Error('clipboard unavailable');
+    const payload=isLikelyIOS()?Promise.resolve(file):file;
+    await navigator.clipboard.write([new ClipboardItem({'image/png':payload})]);
+    flashCopyStatus('Image copied — paste it into the post (Ctrl/Cmd+V)',8000);
+  }catch(err){
+    flashCopyStatus('Could not copy image — the post will include the link',5000);
+  }
+  openXIntent(caption,url);
+}
+window.shareCaption=shareCaption;
+window.currentPermalink=currentPermalink;
+window.xIntentUrl=xIntentUrl;
+
 // ---- events ----
 document.querySelectorAll('#scaleToggle button').forEach(b=>b.onclick=()=>{
   const mode=b.dataset.scale||(b.dataset.l==='1'?'log':'linear');
@@ -851,6 +950,16 @@ const shift=d=>{if(!$('c').checked){$('c').checked=true;setCustomDefaults();sync
 $('Prev').onclick=()=>shift(-1);$('Next').onclick=()=>shift(1);
 $('getPermalink').onclick=e=>{e.preventDefault();$('permalinkbox').hidden=!$('permalinkbox').hidden;$('permalink').select()};
 $('copyImage').onclick=copyChartImage;
+$('postToX')&&($('postToX').onclick=toggleShareMenu);
+$('shareMenu')&&$('shareMenu').addEventListener('click',e=>{
+  const btn=e.target.closest('[data-share]'); if(!btn) return;
+  if(btn.dataset.share==='image') postImageToX(e); else postLinkToX(e);
+});
+document.addEventListener('click',e=>{
+  const wrap=e.target.closest&&e.target.closest('.share-wrap');
+  if(!wrap) setShareMenu(false);
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape') setShareMenu(false)});
 $('downloadPng').onclick=downloadChartPng;
 $('loadRaw').onclick=toggleTable;
 $('downloadCsv').onclick=downloadCsv;
