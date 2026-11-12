@@ -519,6 +519,7 @@ async function composeScoutImage(){
 function renderScout(kind){
   kind=kind||scoutView();
   if(kind==='powerlaw'){renderPowerLawView();return true}
+  if(kind==='drawdown'){renderDrawdownView();return true}
   return false;
 }
 
@@ -528,3 +529,75 @@ window.clearScoutPlots=clearScoutPlots;
 window.composeScoutImage=composeScoutImage;
 window.yearsAheadOfPowerLaw=yearsAheadOfPowerLaw;
 window.powerLawEquation=powerLawEquation;
+
+
+function computeAthSeries(bars){
+  let ath=0;
+  const aths=[], athLine=[], dd=[], usable=[];
+  for(const b of bars||[]){
+    if(!b||!(b.close>0)) continue;
+    usable.push(b);
+    if(b.close>ath){ath=b.close;aths.push({time:b.time,price:b.close})}
+    athLine.push({time:b.time,value:ath});
+    dd.push({time:b.time,value:ath?(b.close/ath-1)*100:0});
+  }
+  return {aths,athLine,dd,bars:usable};
+}
+function syncScoutLw(){
+  charts.forEach(c=>c.priceScale('right').applyOptions({minimumWidth:80}));
+  charts.forEach(c=>c.timeScale().subscribeVisibleLogicalRangeChange(r=>{
+    if(syncing||!r)return;syncing=true;charts.forEach(o=>o!==c&&o.timeScale().setVisibleLogicalRange(r));syncing=false;
+  }));
+  if(charts[0]){charts[0].timeScale().fitContent();setTimeout(()=>charts[0].timeScale().fitContent(),50)}
+}
+function hookLegend(chart, fmt){
+  chart.subscribeCrosshairMove(p=>{
+    const t=p&&p.time;
+    $('legend').textContent=t&&fmt?fmt(t):'';
+  });
+}
+
+function renderDrawdownView(){
+  clearCharts();
+  document.body.classList.add('scout-view','scout-drawdown');
+  $('charts').classList.remove('has-volume');
+  const series=computeAthSeries(bars);
+  window.lastScout={kind:'drawdown',series};
+  const main=$('main');
+  main.innerHTML='';
+  $('subs').innerHTML='';
+  const ddChart=mkChart(main,{});
+  charts.push(ddChart);
+  ddChart.priceScale('right').applyOptions({mode:LW.PriceScaleMode.Normal,scaleMargins:{top:.05,bottom:.08},
+    autoScale:true});
+  const area=ddChart.addBaselineSeries({
+    baseValue:{type:'price',price:0},
+    topLineColor:'transparent',topFillColor1:'transparent',topFillColor2:'transparent',
+    bottomLineColor:'#e53935',bottomFillColor1:'rgba(229,57,53,0.92)',bottomFillColor2:'rgba(229,57,53,0.85)',
+    lineWidth:1,priceLineVisible:false,lastValueVisible:true,
+    title:'Drawdown',
+    priceFormat:{type:'custom',minMove:0.1,formatter:v=>v.toFixed(0)+'%'},
+  });
+  area.setData(series.dd);
+  ddChart.priceScale('right').applyOptions({scaleMargins:{top:.02,bottom:.05}});
+
+  const host=document.createElement('div');
+  host.className='sub scout-panel scout-price';
+  host.innerHTML='<span class="lbl">Price (USD) + ATH</span>';
+  $('subs').appendChild(host);
+  const px=mkChart(host,{localization:{priceFormatter:compact}});
+  charts.push(px);
+  px.priceScale('right').applyOptions({mode:LW.PriceScaleMode.Logarithmic,scaleMargins:{top:.06,bottom:.08}});
+  const close=px.addLineSeries({color:'#f9a825',lineWidth:2,priceLineVisible:false,lastValueVisible:true,title:'Close'});
+  close.setData(series.bars.map(b=>({time:b.time,value:b.close})));
+  const ath=px.addLineSeries({color:'#616161',lineWidth:1.5,lineStyle:2,priceLineVisible:false,lastValueVisible:false,title:'ATH'});
+  ath.setData(series.athLine);
+  hookLegend(px,t=>{
+    const b=series.bars.find(x=>x.time===t); if(!b) return '';
+    const d=series.dd.find(x=>x.time===t);
+    const a=series.athLine.find(x=>x.time===t);
+    return isoUTC(t)+'  ·  $'+usd(b.close)+(a?'  ·  ATH $'+usd(a.value):'')+(d?'  ·  DD '+d.value.toFixed(1)+'%':'');
+  });
+  syncScoutLw();
+}
+

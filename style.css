@@ -98,3 +98,7 @@ body.scout-powerlaw #scaleToggle{display:none}
 body.scout-powerlaw #main{height:340px}
 body.scout-powerlaw .sub.scout-panel{height:170px}
 body.scout-view #charts{overflow:visible}
+
+body.scout-drawdown #main{height:220px}
+body.scout-drawdown .sub.scout-panel{height:300px}
+body.scout-drawdown #scaleToggle{display:none}

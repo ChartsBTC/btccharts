@@ -22,6 +22,7 @@ function syncViewToggle(){
   document.body.classList.toggle('cycles-view',on);
   document.body.classList.toggle('scout-view',!!vt && !on);
   document.body.classList.toggle('scout-powerlaw',vt==='powerlaw' && !on);
+  document.body.classList.toggle('scout-drawdown',vt==='drawdown' && !on);
   document.querySelectorAll('#viewToggle button').forEach(b=>b.classList.toggle('on',(b.dataset.cy==='1')===on && !vt));
   if(!vt && !on) document.querySelectorAll('#viewToggle button').forEach(b=>b.classList.toggle('on',(b.dataset.cy==='1')===false));
   $('main').classList.toggle('cycles',on);
@@ -271,7 +272,7 @@ function drawPowerLawUplot(u,xs,barAt){
 }
 
 let plSeries={};
-function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if(typeof clearScoutPlots==='function')clearScoutPlots();if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view','scout-view','scout-powerlaw');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null}
+function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if(typeof clearScoutPlots==='function')clearScoutPlots();if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view','scout-view','scout-powerlaw','scout-drawdown');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null}
 
 async function draw(pushUrl){
   const hash=buildHash();
@@ -610,7 +611,7 @@ function clear_table(){
   if($('loadRaw')) $('loadRaw').textContent='Show data';
 }
 function showTable(){
-  if($('cy').checked) fillCycleTable(); else if(typeof scoutView==='function'&&scoutView()==='powerlaw') fillPowerLawTable(); else fillPriceTable();
+  if($('cy').checked) fillCycleTable(); else if(typeof scoutView==='function'&&scoutView()==='powerlaw') fillPowerLawTable(); else if(scoutView()==='drawdown') fillDrawdownTable(); else fillPriceTable();
   tableOpen=true;
   $('tableWrap').hidden=false;
   $('downloadCsv').hidden=false;
@@ -655,6 +656,19 @@ function fillCycleTable(){
   }
   $('chart_table').tBodies[0].innerHTML=parts.join('');
 }
+function fillDrawdownTable(){
+  const ser=window.lastScout&&window.lastScout.series, head=['Date','Close','ATH','Drawdown %'];
+  setTableHead(head); tableCsv=[head.slice()];
+  const athBy=new Map((ser?ser.athLine:[]).map(p=>[p.time,p.value]));
+  const ddBy=new Map((ser?ser.dd:[]).map(p=>[p.time,p.value]));
+  const rows=[];
+  for(const b of (ser?ser.bars:bars).slice().reverse()){
+    const rec=[isoUTC(b.time),String(b.close),athBy.has(b.time)?String(athBy.get(b.time)):'',ddBy.has(b.time)?ddBy.get(b.time).toFixed(2):''];
+    tableCsv.push(rec);
+    rows.push('<tr>'+rec.map(c=>'<td>'+c+'</td>').join('')+'</tr>');
+  }
+  $('chart_table').tBodies[0].innerHTML=rows.join('');
+}
 function fillPowerLawTable(){
   const fit=window.lastPowerFit, head=['Date','Close','Power Law','Price / Power Law','Years Ahead'];
   setTableHead(head); tableCsv=[head.slice()];
@@ -689,10 +703,11 @@ function isMobileUa(){
 }
 function chartTitleLine(){
   const vt=($('vt')&&$('vt').value)||'';
-  if(vt==='powerlaw'){
+  if(vt==='powerlaw'||vt==='drawdown'){
     const m=currentMarket();
     const name=m==='combinedUSD'?'BTC/USD Combined':('BTC/USD '+marketLabel(m).replace(/ \(USD\)/,''));
-    return name+' · '+(($('i').value)||'Daily')+' · Power Law';
+    const label={powerlaw:'Power Law',drawdown:'Drawdown from ATH'}[vt];
+    return name+' · '+(($('i').value)||'Daily')+' · '+label;
   }
   const scale=($('ll')&&$('ll').checked)?'Log-Log':($('p').checked?'Percentage':($('l').checked?'Log':'Linear'));
   if($('cy').checked){
@@ -925,6 +940,16 @@ function shareCaption(){
       const ya=window.lastPowerFit?yearsAheadOfPowerLaw(d,last.close,window.lastPowerFit):null;
       if(ya!=null) bits.push('Years ahead '+(ya>=0?'+':'')+ya.toFixed(2));
     }
+    return bits.join('. ')+'.';
+  }
+  if(vt==='drawdown'){
+    bits.push('Bitcoin drawdown from all-time highs');
+    const ser=window.lastScout&&window.lastScout.series;
+    if(ser&&ser.dd.length){
+      const last=ser.dd.at(-1), ath=ser.athLine.at(-1);
+      bits.push('Currently '+last.value.toFixed(1)+'% from ATH ($'+usd(ath.value)+')');
+    }
+    if(bars.length) bits.push('Last $'+Number(bars.at(-1).close).toLocaleString('en-US',{maximumFractionDigits:0})+' on '+isoUTC(bars.at(-1).time));
     return bits.join('. ')+'.';
   }
   if($('cy')&&$('cy').checked){
