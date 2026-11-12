@@ -23,3 +23,4 @@ Static bitcoincharts.com-style chart page.
 - 3-hour candles are available in the interval list (aggregated from 1-hour data).
 - Halving-epoch candles (`vtgepoch`): one candle per halving era with an OHLC box and % change label. Yearly candles also show a % change label.
 - Dual axis (`da`): log scale on the left and linear scale on the right, on the same price chart.
+- Dark mode: a header toggle themes the page and every chart (Lightweight Charts and uPlot). The choice is saved in localStorage, defaults to the system `prefers-color-scheme`, and can be forced with the \`dk\` hash key so permalinks, Copy image, Download PNG, and Post image all render in the active theme.

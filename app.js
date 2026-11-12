@@ -1,12 +1,58 @@
 const $=id=>document.getElementById(id);
 const LW=LightweightCharts;
+
+const THEME_KEY='btccharts-theme';
+function systemDark(){return !!(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)}
+function isDark(){return document.documentElement.classList.contains('dark')}
+function chartTheme(){
+  if(isDark()){
+    return {
+      bg:'#121212', text:'#e6e6e6', grid:'#2a2a2a', border:'#444',
+      cross:'#888', title:'#eee', sub:'#ffb74d',
+      exportBg:'#121212', exportTitle:'#eee', muted:'#aaa',
+      wmFill:'rgba(255,255,255,0.55)', wmStroke:'rgba(0,0,0,0.65)',
+      boxBg:'rgba(24,24,24,0.92)', boxStroke:'#aaa',
+    };
+  }
+  return {
+    bg:'#fff', text:'#333', grid:'#eee', border:'#ccc',
+    cross:'#999', title:'#222', sub:'#b86a00',
+    exportBg:'#fff', exportTitle:'#222', muted:'#666',
+    wmFill:'rgba(40,40,40,0.4)', wmStroke:'rgba(255,255,255,0.8)',
+    boxBg:'rgba(255,255,255,0.92)', boxStroke:'#333',
+  };
+}
+function applyTheme(dark, opts){
+  opts=opts||{};
+  dark=!!dark;
+  document.documentElement.classList.toggle('dark',dark);
+  document.body.classList.toggle('dark',dark);
+  const btn=$('themeToggle');
+  if(btn) btn.textContent=dark?'Light':'Dark';
+  if(typeof syncEpochColors==='function') syncEpochColors();
+  if(!opts.skipSave){
+    try{localStorage.setItem(THEME_KEY, dark?'dark':'light')}catch(e){}
+  }
+}
+function initTheme(){
+  const parts=(location.hash||'').slice(1).split('z').filter(Boolean);
+  if(parts.includes('dk')){applyTheme(true);return}
+  let saved=null;
+  try{saved=localStorage.getItem(THEME_KEY)}catch(e){}
+  if(saved==='dark'||saved==='light') applyTheme(saved==='dark',{skipSave:true});
+  else applyTheme(systemDark(),{skipSave:true});
+}
+
+
 const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','da','cy','ca','cp','ch','cl','hv','ll','pl','ep','rp','rpl','vt','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw'];
 // populate indicator selects (only implemented ones, original naming)
 document.querySelectorAll('select.ind').forEach(s=>{s.innerHTML='<option value="">None</option>'+Object.entries(INDICATORS).map(([k,v])=>`<option value="${k}">${v.label.replace(/ \(.*/,'')}</option>`).join('')});
 
 // ---- URL hash: <id>g<value> joined by z (bitcoincharts format) ----
 function buildHash(){const h=[];for(const id of FIELDS){const e=$(id);
-  if(e.type==='checkbox'){if(e.checked)h.push(id)}else if(e.value)h.push(id+'g'+escape(e.value))}return h.join('z')}
+  if(e.type==='checkbox'){if(e.checked)h.push(id)}else if(e.value)h.push(id+'g'+escape(e.value))}
+  if(typeof isDark==='function'&&isDark())h.push('dk');
+  return h.join('z')}
 function parseHash(hash){ if(!hash)return;
   // reset everything to blank/unchecked; hash fully describes state (original reset v,t,r)
   for(const id of FIELDS){const e=$(id);if(id==='m'){e.value='combinedUSD';continue}if(e.type==='checkbox')e.checked=false;else e.value=({m1:'10',m2:'25',ca:'low',cp:'usd',pma:'200d',pmm:'panel',rm:'cagr',rn:'4',pb:'1, 5, 20, 50, 80, 95, 99',blw:'50'})[id]||''}
@@ -108,9 +154,9 @@ async function priceEventMarkers(){
 
 // ---- charts ----
 let charts=[],bars=[],syncing=false;
-function mkChart(el,opts={}){return LW.createChart(el,{autoSize:true,layout:{background:{color:'#fff'},textColor:'#333',fontSize:11},
-  grid:{vertLines:{color:'#eee'},horzLines:{color:'#eee'}},rightPriceScale:{borderColor:'#ccc'},
-  timeScale:{borderColor:'#ccc',timeVisible:true,secondsVisible:false,minBarSpacing:0.05},crosshair:{mode:0},...opts})}
+function mkChart(el,opts={}){const th=chartTheme();return LW.createChart(el,{autoSize:true,layout:{background:{color:th.bg},textColor:th.text,fontSize:11},
+  grid:{vertLines:{color:th.grid},horzLines:{color:th.grid}},rightPriceScale:{borderColor:th.border},leftPriceScale:{borderColor:th.border},
+  timeScale:{borderColor:th.border,timeVisible:true,secondsVisible:false,minBarSpacing:0.05},crosshair:{mode:0,vertLine:{color:th.cross},horzLine:{color:th.cross}},...opts})}
 const ser=(arr)=>bars.map((b,i)=>arr[i]==null||!isFinite(arr[i])?{time:b.time}:{time:b.time,value:arr[i]});
 let uplot=null,lastMarks=[];
 const GENESIS=Date.UTC(2009,0,3)/1000;
@@ -933,9 +979,10 @@ function paintWatermark(ctx,x,y,w,h,dpr,opts){
   if(opts.loglog) bottom=52*dpr;
   const tx=x+left, ty=y+h-bottom;
   ctx.lineWidth=Math.max(2,3*dpr);
-  ctx.strokeStyle='rgba(255,255,255,0.8)';
+  const th=chartTheme();
+  ctx.strokeStyle=th.wmStroke;
   ctx.strokeText(WATERMARK_TEXT,tx,ty);
-  ctx.fillStyle='rgba(40,40,40,0.4)';
+  ctx.fillStyle=th.wmFill;
   ctx.fillText(WATERMARK_TEXT,tx,ty);
   ctx.restore();
 }
@@ -958,10 +1005,11 @@ async function composeChartImage(){
     const canvas=document.createElement('canvas');
     canvas.width=width; canvas.height=pad+titleH+subH+cv.height+pad;
     const ctx=canvas.getContext('2d');
-    ctx.fillStyle='#fff'; ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.fillStyle='#222'; ctx.font=titleSize+'px Verdana,Arial,sans-serif'; ctx.textBaseline='top';
+    const th=chartTheme();
+    ctx.fillStyle=th.exportBg; ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle=th.exportTitle; ctx.font=titleSize+'px Verdana,Arial,sans-serif'; ctx.textBaseline='top';
     ctx.fillText(chartTitleLine(),pad,pad);
-    if(sub){ctx.fillStyle='#b86a00';ctx.font=Math.round(11*dpr)+'px Verdana,Arial,sans-serif';ctx.fillText(sub,pad,pad+titleH-Math.round(8*dpr))}
+    if(sub){ctx.fillStyle=th.sub;ctx.font=Math.round(11*dpr)+'px Verdana,Arial,sans-serif';ctx.fillText(sub,pad,pad+titleH-Math.round(8*dpr))}
     ctx.drawImage(cv,0,pad+titleH+subH);
     paintWatermark(ctx,0,pad+titleH+subH,width,cv.height,dpr,{loglog:true});
     if(typeof epochEnabled==='function'&&epochEnabled()&&typeof paintEpochLegend==='function'){
@@ -997,13 +1045,14 @@ async function composeChartImage(){
   canvas.width=width+0;
   canvas.height=totalH;
   const ctx=canvas.getContext('2d');
-  ctx.fillStyle='#fff';
+  const th=chartTheme();
+  ctx.fillStyle=th.exportBg;
   ctx.fillRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle='#222';
+  ctx.fillStyle=th.exportTitle;
   ctx.font=`${titleSize}px Verdana,Arial,sans-serif`;
   ctx.textBaseline='top';
   ctx.fillText(title,pad,pad);
-  if(sub){ctx.fillStyle='#b86a00';ctx.font=Math.round(11*dpr)+'px Verdana,Arial,sans-serif';ctx.fillText(sub,pad,pad+titleH-Math.round(8*dpr));ctx.fillStyle='#222';ctx.font=titleSize+'px Verdana,Arial,sans-serif'}
+  if(sub){ctx.fillStyle=th.sub;ctx.font=Math.round(11*dpr)+'px Verdana,Arial,sans-serif';ctx.fillText(sub,pad,pad+titleH-Math.round(8*dpr));ctx.fillStyle=th.exportTitle;ctx.font=titleSize+'px Verdana,Arial,sans-serif'}
   let y=pad+titleH+subH;
   if(legendItems.length){
     ctx.font=`${Math.round(12*dpr)}px Verdana,Arial,sans-serif`;
@@ -1016,7 +1065,7 @@ async function composeChartImage(){
       if(cx+tw>pad+maxW){cx=pad;cy+=legendRow}
       ctx.fillStyle=line.color||'#333';
       ctx.fillRect(cx,cy-box/2,box,box);
-      ctx.fillStyle='#333';
+      ctx.fillStyle=th.text;
       ctx.fillText(label,cx+box+Math.round(5*dpr),cy);
       cx+=tw;
     }
@@ -1305,6 +1354,10 @@ $('downloadPng').onclick=downloadChartPng;
 $('loadRaw').onclick=toggleTable;
 $('downloadCsv').onclick=downloadCsv;
 $('larger').onclick=e=>{e.preventDefault();document.body.classList.toggle('wide')};
-window.onpopstate=()=>{parseHash(location.hash.slice(1));syncCustom();syncViewToggle();draw(0)};
+window.onpopstate=()=>{parseHash(location.hash.slice(1));initTheme();syncCustom();syncViewToggle();draw(0)};
 // init: original defaults = 60 days, candlestick, MA 10/25 lengths, volume on
-parseHash(location.hash.slice(1));syncCustom();syncViewToggle();draw(2);
+parseHash(location.hash.slice(1));initTheme();syncCustom();syncViewToggle();draw(2);
+
+window.isDark=isDark;
+window.chartTheme=chartTheme;
+window.applyTheme=applyTheme;

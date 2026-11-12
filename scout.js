@@ -1,5 +1,12 @@
+function T(){
+  return (typeof chartTheme==='function'&&chartTheme())||{bg:'#fff',text:'#333',grid:'#eee',border:'#ccc',title:'#222',sub:'#b86a00',exportBg:'#fff',exportTitle:'#222',boxBg:'rgba(255,255,255,0.92)',boxStroke:'#333'};
+}
 // Chart Scout helpers and views. Epoch coloring is reused by price, log-log, and scout charts.
-const EPOCH_COLORS=['#9e9e9e','#1565c0','#f9a825','#2e7d32','#212121'];
+const EPOCH_COLORS_LIGHT=['#9e9e9e','#1565c0','#f9a825','#2e7d32','#212121'];
+const EPOCH_COLORS_DARK=['#bdbdbd','#64b5f6','#ffd54f','#81c784','#f5f5f5'];
+const EPOCH_COLORS=EPOCH_COLORS_LIGHT.slice();
+function syncEpochColors(){const src=(typeof isDark==='function'&&isDark())?EPOCH_COLORS_DARK:EPOCH_COLORS_LIGHT;for(let i=0;i<src.length;i++)EPOCH_COLORS[i]=src[i]}
+
 const EPOCH_NAMES=['Epoch 1','Epoch 2','Epoch 3','Epoch 4','Epoch 5'];
 
 function epochIndex(t){
@@ -110,7 +117,7 @@ function paintEpochLegend(ctx, x, y, dpr, opts){
   for(const it of items){
     ctx.fillStyle=it.color;
     ctx.fillRect(x,cy-box/2,box,box);
-    ctx.fillStyle='#333';
+    ctx.fillStyle=T().text;
     ctx.fillText(it.name,x+box+Math.round(5*dpr),cy);
     cy+=row;
   }
@@ -541,7 +548,7 @@ function drawYearLabels(u, pr){
   ctx.save();
   ctx.beginPath(); ctx.rect(0,0,u.width*pr,u.height*pr); ctx.clip();
   ctx.font=(10*pr)+'px Verdana,Arial,sans-serif';
-  ctx.fillStyle='#333';
+  ctx.fillStyle=T().text;
   ctx.textAlign='center';
   ctx.textBaseline='top';
   const axisY=(u.bbox.top+u.bbox.height)+4*pr;
@@ -559,7 +566,7 @@ function drawPanelTitle(u, title, pr){
   const ctx=u.ctx;
   ctx.save();
   ctx.font='bold '+(11*pr)+'px Verdana,Arial,sans-serif';
-  ctx.fillStyle='#333';
+  ctx.fillStyle=T().text;
   ctx.textAlign='center';
   ctx.textBaseline='top';
   ctx.fillText(title, u.bbox.left+u.bbox.width/2, Math.max(2*pr, u.bbox.top-16*pr));
@@ -578,11 +585,11 @@ function makeScoutUplot(host, xs, ys, opts){
       y: Object.assign(opts.yLinear?{distr:1}:{distr:3,log:10}, opts.yRange?{range:(u,min,max)=>opts.yRange}:{}),
     },
     axes:[
-      {scale:'x',stroke:'#333',grid:{stroke:'#eee'},ticks:{stroke:'#ccc'},
+      {scale:'x',stroke:T().text,grid:{stroke:T().grid},ticks:{stroke:T().border},
         size:opts.xLabels?36:4,space:8,font:'10px Verdana,Arial,sans-serif',
         splits:(u,axisIdx,min,max)=>opts.xLabels?yearSplits(min,max):[],
         values:()=>[]},
-      {scale:'y',stroke:'#333',grid:{stroke:'#eee'},ticks:{stroke:'#ccc'},size:64,
+      {scale:'y',stroke:T().text,grid:{stroke:T().grid},ticks:{stroke:T().border},size:64,
         font:'11px Verdana,Arial,sans-serif',
         values:(u,splits)=>splits.map(v=>{
           if(v==null||!isFinite(v)) return '';
@@ -766,12 +773,12 @@ function renderPowerLawView(){
     ctx.save();
     ctx.font=(11*pr)+'px Verdana,Arial,sans-serif';
     const w=Math.max(ctx.measureText(line1).width,ctx.measureText(line2).width)+12*pr, h=32*pr;
-    ctx.fillStyle='rgba(255,255,255,0.9)';
-    ctx.strokeStyle='#333';
+    ctx.fillStyle=T().boxBg;
+    ctx.strokeStyle=T().boxStroke;
     ctx.lineWidth=1*pr;
     ctx.fillRect(boxX,boxY,w,h);
     ctx.strokeRect(boxX,boxY,w,h);
-    ctx.fillStyle='#111';
+    ctx.fillStyle=T().text;
     ctx.textAlign='left';
     ctx.textBaseline='top';
     ctx.fillText(line1,boxX+6*pr,boxY+4*pr);
@@ -839,7 +846,7 @@ function renderPowerLawView(){
           const ctx=u.ctx;
           ctx.save();
           ctx.font='bold '+(11*pr)+'px Verdana,Arial,sans-serif';
-          ctx.fillStyle='#333';
+          ctx.fillStyle=T().text;
           ctx.textAlign='left';
           ctx.textBaseline='top';
           ctx.fillText(cur, u.bbox.left+8*pr, u.bbox.top+6*pr);
@@ -891,10 +898,10 @@ async function composeScoutImage(){
     const canvas=document.createElement('canvas');
     canvas.width=src.width; canvas.height=src.height+pad+titleH+pad;
     const ctx=canvas.getContext('2d');
-    ctx.fillStyle=getComputedStyle(document.body).backgroundColor||'#fff';
-    if(ctx.fillStyle==='rgba(0, 0, 0, 0)'||ctx.fillStyle==='transparent') ctx.fillStyle='#fff';
+    const th=T();
+    ctx.fillStyle=th.exportBg;
     ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.fillStyle='#222'; ctx.font=titleSize+'px Verdana,Arial,sans-serif'; ctx.textBaseline='top';
+    ctx.fillStyle=th.exportTitle; ctx.font=titleSize+'px Verdana,Arial,sans-serif'; ctx.textBaseline='top';
     ctx.fillText(chartTitleLine(),pad,pad);
     ctx.drawImage(src,0,pad+titleH);
     paintWatermark(ctx,0,pad+titleH,src.width,src.height,dpr,{});
@@ -914,10 +921,11 @@ async function composeScoutImage(){
   const canvas=document.createElement('canvas');
   canvas.width=width; canvas.height=total;
   const ctx=canvas.getContext('2d');
-  ctx.fillStyle='#fff'; ctx.fillRect(0,0,width,total);
-  ctx.fillStyle='#222'; ctx.font=titleSize+'px Verdana,Arial,sans-serif'; ctx.textBaseline='top';
+  const th=T();
+  ctx.fillStyle=th.exportBg; ctx.fillRect(0,0,width,total);
+  ctx.fillStyle=th.exportTitle; ctx.font=titleSize+'px Verdana,Arial,sans-serif'; ctx.textBaseline='top';
   ctx.fillText(chartTitleLine(),pad,pad);
-  if(sub){ctx.fillStyle='#b86a00';ctx.font=Math.round(11*dpr)+'px Verdana,Arial,sans-serif';ctx.fillText(sub,pad,pad+titleH-Math.round(8*dpr))}
+  if(sub){ctx.fillStyle=th.sub;ctx.font=Math.round(11*dpr)+'px Verdana,Arial,sans-serif';ctx.fillText(sub,pad,pad+titleH-Math.round(8*dpr))}
   let y=pad+titleH+subH;
   canvases.forEach((c,i)=>{
     const x=Math.round((width-c.width)/2);
@@ -1514,7 +1522,7 @@ async function renderEpochCandlesView(){
 
   attachPaintCanvas(main,(ctx,w,h,canvas)=>{
     ctx.clearRect(0,0,w,h);
-    ctx.fillStyle='#fff';
+    ctx.fillStyle=T().bg;
     ctx.fillRect(0,0,w,h);
     const padL=64, padR=20, padT=28, padB=52;
     const plotW=w-padL-padR, plotH=h-padT-padB;
@@ -1523,11 +1531,11 @@ async function renderEpochCandlesView(){
     const maxP=Math.max(...candles.map(c=>c.high))*1.8;
     const yOf=p=>padT+plotH*(1-(Math.log10(p)-Math.log10(minP))/(Math.log10(maxP)-Math.log10(minP)));
     // grid
-    ctx.strokeStyle='#eee'; ctx.lineWidth=1;
+    ctx.strokeStyle=T().grid; ctx.lineWidth=1;
     const ticks=[];
     for(const e of [-2,-1,0,1,2,3,4,5,6]) ticks.push(Math.pow(10,e));
     ctx.font='11px Verdana,Arial,sans-serif';
-    ctx.fillStyle='#333';
+    ctx.fillStyle=T().text;
     ctx.textAlign='right'; ctx.textBaseline='middle';
     for(const t of ticks){
       if(t<minP||t>maxP) continue;
@@ -1536,7 +1544,7 @@ async function renderEpochCandlesView(){
       const lab=t>=1000?'$'+compact(t):'$'+String(t);
       ctx.fillStyle='#333'; ctx.fillText(lab, padL-6, y);
     }
-    ctx.strokeStyle='#ccc';
+    ctx.strokeStyle=T().border;
     ctx.strokeRect(padL,padT,plotW,plotH);
 
     const n=candles.length, slot=plotW/n, bodyW=Math.min(86, slot*0.42);
@@ -1561,7 +1569,7 @@ async function renderEpochCandlesView(){
       // % label above wick
       const pl=cnd.pct==null?'':(Math.round(cnd.pct)+'%');
       ctx.font='bold 12px Verdana,Arial,sans-serif';
-      ctx.fillStyle='#111';
+      ctx.fillStyle=T().text;
       ctx.textAlign='center'; ctx.textBaseline='bottom';
       ctx.fillText(pl, s.cx, s.yHigh-6);
       // OHLC box
@@ -1580,16 +1588,16 @@ async function renderEpochCandlesView(){
       if(bx<padL+4) bx=padL+4;
       if(by+boxH>padT+plotH-4) by=padT+plotH-4-boxH;
       if(by<padT+4) by=padT+4;
-      ctx.fillStyle='rgba(255,255,255,0.94)';
-      ctx.strokeStyle='#333'; ctx.lineWidth=1;
+      ctx.fillStyle=T().boxBg;
+      ctx.strokeStyle=T().boxStroke; ctx.lineWidth=1;
       ctx.fillRect(bx,by,boxW,boxH);
       ctx.strokeRect(bx,by,boxW,boxH);
-      ctx.fillStyle='#111';
+      ctx.fillStyle=T().text;
       ctx.textAlign='left'; ctx.textBaseline='top';
       lines.forEach((t,k)=>ctx.fillText(t, bx+7, by+5+k*16));
       // x labels
       ctx.font='10px Verdana,Arial,sans-serif';
-      ctx.fillStyle='#333';
+      ctx.fillStyle=T().text;
       ctx.textAlign='center'; ctx.textBaseline='top';
       const a=isoUTC(cnd.start), b=isoUTC(cnd.end);
       ctx.fillText(a+' –', s.cx, padT+plotH+8);
@@ -1614,3 +1622,5 @@ async function renderEpochCandlesView(){
 }
 window.formatUsdBox=formatUsdBox;
 window.epochCandleSlices=epochCandleSlices;
+window.syncEpochColors=syncEpochColors;
+window.T=T;
