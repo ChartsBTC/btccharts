@@ -98,6 +98,7 @@
       <option value="pricema">Price / MA</option>
       <option value="returns">Rolling returns</option>
       <option value="epoch">Halving-epoch candles</option>
+      <option value="calyear">Calendar year overlay</option>
     </select>
   </label>
   <span id="priceMaOpts" class="scout-opts" hidden>
@@ -109,6 +110,12 @@
     <label>Style <select id="pmm">
       <option value="panel" selected>Price + ratio</option>
       <option value="osc">Percentile oscillator</option>
+    </select></label>
+  </span>
+  <span id="yearOpts" class="scout-opts" hidden>
+    <label>Mode <select id="ym">
+      <option value="raw" selected>Raw USD (linear)</option>
+      <option value="idx">Indexed to current Jan 1 (log)</option>
     </select></label>
   </span>
   <span id="returnsOpts" class="scout-opts" hidden>

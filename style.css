@@ -155,6 +155,12 @@ body.scout-epoch #scaleToggle,body.scout-epoch #markerBox,body.scout-epoch #rati
 body.scout-epoch #main{height:540px}
 .scout-canvas{position:absolute;inset:0}
 body.scout-epoch #chartWatermark{bottom:64px}
+body.scout-epoch #chartWatermark{bottom:64px}
+
+body.scout-calyear #yearOpts{display:inline-flex}
+body.scout-calyear #scaleToggle,body.scout-calyear #markerBox,body.scout-calyear #ratioBox,body.scout-calyear #ratioLogBox{display:none}
+body.scout-calyear #main{height:540px}
+body.scout-calyear #chartWatermark{bottom:52px}
 
 a{color:var(--link)}
 select,input[type="text"],input[type="date"],input[type="number"],input#pb{background:var(--input-bg);color:var(--fg);border:1px solid var(--border)}
@@ -177,6 +183,7 @@ body.page-classic #pctBandOpts,
 body.page-classic #blendOpts,
 body.page-classic #priceMaOpts,
 body.page-classic #returnsOpts,
+body.page-classic #yearOpts,
 body.page-classic #scaleToggle [data-scale="loglog"],
 body.page-classic label:has(#da),
 body.page-classic #r optgroup,

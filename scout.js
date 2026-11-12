@@ -945,6 +945,7 @@ async function renderScout(kind){
   if(kind==='pricema'){await renderPriceMaView();return true}
   if(kind==='returns'){await renderReturnsView();return true}
   if(kind==='epoch'){await renderEpochCandlesView();return true}
+  if(kind==='calyear'){await renderCalYearView();return true}
   return false;
 }
 
@@ -1624,3 +1625,225 @@ window.formatUsdBox=formatUsdBox;
 window.epochCandleSlices=epochCandleSlices;
 window.syncEpochColors=syncEpochColors;
 window.T=T;
+
+
+const CALYEAR_COLORS={
+  2011:'#90caf9',2012:'#ce93d8',2013:'#80cbc4',2014:'#bcaaa4',2015:'#a5d6a7',2016:'#b0bec5',
+  2017:'#c9a227',2018:'#29b6f6',2019:'#fbc02d',2020:'#7e57c2',2021:'#ec407a',
+  2022:'#43a047',2023:'#ef9a9a',2024:'#6d4c41',2025:'#fb8c00'
+};
+function calYearColor(year, current, dark){
+  if(year===current) return dark?'#fafafa':'#111';
+  return CALYEAR_COLORS[year]||('hsl('+(year*47)%360+' 55% 42%)');
+}
+function utcYmd(t){
+  const d=new Date(t*1000);
+  return {y:d.getUTCFullYear(),m:d.getUTCMonth()+1,day:d.getUTCDate()};
+}
+function dayXOfYear(m, day){
+  // x = days since Jan 1 on a leap calendar (2020), so Feb 29 has a slot
+  return (Date.UTC(2020,m-1,day)-Date.UTC(2020,0,1))/86400000;
+}
+function firstBarOfYear(daily, year){
+  for(const b of daily){ if(utcYmd(b.time).y===year) return b; }
+  return null;
+}
+function groupDailyByYear(daily){
+  const years=new Map();
+  for(const b of daily){
+    if(!(b&&b.close>0)) continue;
+    const {y,m,day}=utcYmd(b.time);
+    let arr=years.get(y);
+    if(!arr){arr=[];years.set(y,arr)}
+    arr.push({bar:b,m,day,x:dayXOfYear(m,day),close:b.close});
+  }
+  return years;
+}
+function formatAxisUsd(v, linear){
+  if(v==null||!isFinite(v)) return '';
+  if(v===0) return '$0';
+  const a=Math.abs(v);
+  if(a>=1e6) return '$'+(v/1e6).toLocaleString('en-US',{maximumFractionDigits:v%1e6?2:0})+'M';
+  if(linear && a>=1000) return '$'+Math.round(v).toLocaleString('en-US');
+  if(a>=1000) return '$'+Math.round(v).toLocaleString('en-US');
+  if(a>=1) return '$'+Math.round(v);
+  return '$'+v.toFixed(2);
+}
+function niceLinearMax(v){
+  if(!(v>0)) return 1;
+  const exp=Math.pow(10,Math.floor(Math.log10(v)));
+  for(const m of [1,1.2,1.5,2,2.5,3,4,5,6,8,10]){
+    if(v<=m*exp) return m*exp;
+  }
+  return 10*exp;
+}
+function calYearMode(){return ($('ym')&&$('ym').value)==='idx'?'idx':'raw'}
+
+async function renderCalYearView(){
+  clearCharts();
+  document.body.classList.add('scout-view','scout-calyear');
+  $('charts').classList.remove('has-volume');
+  const daily=await scoutDailyBars();
+  const byYear=groupDailyByYear(daily);
+  const years=[...byYear.keys()].sort((a,b)=>a-b);
+  if(!years.length){status('Not enough data for a calendar-year overlay.');return}
+  const current=years.at(-1);
+  const mode=calYearMode();
+  // Raw linear: 2017+ (earlier years hug the axis). Indexed: 2020+ to match the reference scale.
+  const minYear=mode==='idx'?2020:2017;
+  const shown=years.filter(y=>y>=minYear);
+  const jan1=firstBarOfYear(daily, current);
+  const jan1Px=jan1?jan1.close:null;
+  const series=shown.map(y=>{
+    const pts=byYear.get(y).slice();
+    const open=firstBarOfYear(daily,y);
+    const base=open?open.close:null;
+    const values=pts.map(p=>{
+      let v=p.close;
+      if(mode==='idx'){
+        if(!(base>0)||!(jan1Px>0)) v=null;
+        else v=p.close/base*jan1Px;
+      }
+      return {x:p.x,v,m:p.m,day:p.day,bar:p.bar};
+    }).filter(p=>p.v!=null&&p.v>0);
+    return {year:y,pts:values,current:y===current,open:open&&open.close};
+  }).filter(s=>s.pts.length>1);
+  window.lastScout={kind:'calyear',mode,current,jan1:jan1Px,series,minYear};
+  const main=$('main');
+  main.innerHTML='';
+  $('subs').innerHTML='';
+  setEpochLegend(false);
+  const last=series.find(s=>s.current);
+  const lastPt=last&&last.pts.at(-1);
+  status(series.length+' calendar years · '+(mode==='idx'?'indexed to '+current+' Jan 1 '+formatAxisUsd(jan1Px):'raw USD, linear')+(lastPt?' · '+current+' last '+formatAxisUsd(lastPt.v):''));
+
+  attachPaintCanvas(main,(ctx,w,h)=>{
+    const th=T();
+    const dark=typeof isDark==='function'&&isDark();
+    ctx.fillStyle=th.bg; ctx.fillRect(0,0,w,h);
+    const padL=72, padR=108, padT=18, padB=44;
+    const plotW=w-padL-padR, plotH=h-padT-padB;
+    if(plotW<80||plotH<80) return;
+    const xMin=0, xMax=dayXOfYear(12,31); // 0..365 inclusive through Dec 31 / next Jan
+    let yMin,yMax;
+    const allV=series.flatMap(s=>s.pts.map(p=>p.v));
+    if(mode==='idx'){
+      const lo=Math.min(...allV), hi=Math.max(...allV);
+      yMin=Math.max(lo/1.25, 1);
+      yMax=hi*1.15;
+    }else{
+      yMin=0;
+      yMax=niceLinearMax(Math.max(...allV)*1.05);
+    }
+    const xOf=x=>padL+plotW*((x-xMin)/(xMax-xMin));
+    const yOf=v=>{
+      if(mode==='idx'){
+        const a=Math.log(yMin), b=Math.log(yMax);
+        return padT+plotH*(1-(Math.log(v)-a)/(b-a));
+      }
+      return padT+plotH*(1-(v-yMin)/(yMax-yMin));
+    };
+    // grid + axes
+    ctx.font='11px Verdana,Arial,sans-serif';
+    const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    ctx.strokeStyle=th.grid; ctx.lineWidth=1;
+    ctx.fillStyle=th.text; ctx.textAlign='center'; ctx.textBaseline='top';
+    for(let m=1;m<=12;m++){
+      const x=xOf(dayXOfYear(m,1));
+      ctx.beginPath(); ctx.moveTo(x,padT); ctx.lineTo(x,padT+plotH); ctx.stroke();
+      ctx.fillText(months[m-1], x, padT+plotH+8);
+    }
+    // right-edge Jan tick (next year)
+    const xEnd=xOf(xMax);
+    ctx.beginPath(); ctx.moveTo(xEnd,padT); ctx.lineTo(xEnd,padT+plotH); ctx.stroke();
+    if(mode==='idx') ctx.fillText('Jan', xEnd, padT+plotH+8);
+
+    const yTicks=[];
+    if(mode==='idx'){
+      const start=10000;
+      for(let v=start;v<=yMax*1.05;v*=2) yTicks.push(v);
+    }else{
+      const step=yMax/6;
+      for(let i=0;i<=6;i++) yTicks.push(step*i);
+    }
+    ctx.textAlign='right'; ctx.textBaseline='middle';
+    for(const v of yTicks){
+      if(mode==='idx'&&(v<yMin*0.98||v>yMax*1.02)) continue;
+      if(mode!=='idx'&&(v<0||v>yMax*1.001)) continue;
+      const y=yOf(Math.max(mode==='idx'?yMin:0, v)||(mode==='idx'?yMin:0));
+      if(mode==='idx'&&v<yMin) continue;
+      if(v===0 && mode==='idx') continue;
+      ctx.strokeStyle=th.grid; ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(padL+plotW,y); ctx.stroke();
+      ctx.fillStyle=th.text;
+      ctx.fillText(formatAxisUsd(v, mode!=='idx'), padL-8, y);
+    }
+    ctx.strokeStyle=th.border; ctx.strokeRect(padL,padT,plotW,plotH);
+
+    // lines, current year last (on top)
+    const drawLine=(s,w,col)=>{
+      ctx.strokeStyle=col; ctx.lineWidth=w; ctx.lineJoin='round'; ctx.lineCap='round';
+      ctx.beginPath();
+      let started=false;
+      for(const p of s.pts){
+        const x=xOf(p.x), y=yOf(p.v);
+        if(!isFinite(x)||!isFinite(y)) continue;
+        if(!started){ctx.moveTo(x,y);started=true}else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    };
+    const rest=series.filter(s=>!s.current);
+    const cur=series.find(s=>s.current);
+    for(const s of rest) drawLine(s, 1.5, calYearColor(s.year, current, dark));
+    if(cur) drawLine(cur, 2.6, calYearColor(cur.year, current, dark));
+
+    // legend, current year first
+    const items=[...series].sort((a,b)=>b.year-a.year);
+    const lx=padL+plotW+16, ly=padT+4;
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.font='12px Verdana,Arial,sans-serif';
+    items.forEach((s,i)=>{
+      const y=ly+i*18;
+      const col=calYearColor(s.year, current, dark);
+      ctx.strokeStyle=col; ctx.lineWidth=s.current?2.6:1.8;
+      ctx.beginPath(); ctx.moveTo(lx,y); ctx.lineTo(lx+16,y); ctx.stroke();
+      ctx.fillStyle=th.text;
+      ctx.font=(s.current?'bold ':'')+'12px Verdana,Arial,sans-serif';
+      ctx.fillText(String(s.year), lx+22, y);
+    });
+
+    ctx.fillStyle=th.muted||th.text;
+    ctx.font='10px Verdana,Arial,sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.fillText('Date', padL+plotW/2, h-4);
+  });
+
+  const cnv=window.scoutCanvas;
+  if(cnv){
+    cnv.style.cursor='crosshair';
+    cnv.addEventListener('mousemove',ev=>{
+      const rect=cnv.getBoundingClientRect();
+      const x=ev.clientX-rect.left, y=ev.clientY-rect.top;
+      const w=rect.width, h=rect.height;
+      const padL=72, padR=108, padT=18, padB=44;
+      const plotW=w-padL-padR, plotH=h-padT-padB;
+      const xMin=0, xMax=dayXOfYear(12,31);
+      if(x<padL||x>padL+plotW||y<padT||y>padT+plotH){$('legend').textContent='';return}
+      const xv=xMin+(x-padL)/plotW*(xMax-xMin);
+      // find nearest day across series
+      let best=null, bestD=8;
+      for(const s of series){
+        for(const p of s.pts){
+          const d=Math.abs(p.x-xv);
+          if(d<bestD){bestD=d;best={s,p}}
+        }
+      }
+      if(!best){$('legend').textContent='';return}
+      const mon=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][best.p.m-1];
+      $('legend').textContent=best.s.year+'  '+mon+' '+best.p.day+'  ·  '+formatAxisUsd(best.p.v)+(mode==='idx'?' indexed':'');
+    });
+    cnv.addEventListener('mouseleave',()=>{$('legend').textContent=''});
+  }
+}
+window.renderCalYearView=renderCalYearView;
+window.calYearMode=calYearMode;
+window.formatAxisUsd=formatAxisUsd;
