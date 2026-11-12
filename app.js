@@ -105,6 +105,7 @@ function scaledVisibleMinMax(lines, chart){
 }
 function renderCycles(align, mode){
   clearCharts();syncScaleToggle();
+  $('charts').classList.remove('has-volume');
   mode=mode||$('cp').value||'usd';
   const isLog=$('l').checked;
   const stacked=mode==='usd';
@@ -198,6 +199,7 @@ function compact(v){const a=Math.abs(v);if(a>=1e6)return +(v/1e6).toPrecision(3)
 function syncScaleToggle(){document.querySelectorAll('#scaleToggle button').forEach(b=>b.classList.toggle('on',(b.dataset.l==='1')===$('l').checked))}
 function render(interval){
   clearCharts();syncScaleToggle();
+  $('charts').classList.toggle('has-volume',!!$('v').checked);
   const isLog=$('l').checked&&!$('p').checked;
   const main=mkChart($('main'),{localization:{priceFormatter:isLog?compact:v=>v<0?'':v.toLocaleString('en-US',{maximumFractionDigits:2})}});charts.push(main);
   const ps=main.priceScale('right');
@@ -245,6 +247,193 @@ $('loadRaw').onclick=e=>{e.preventDefault();const tb=$('chart_table').tBodies[0]
   tb.innerHTML=bars.slice().reverse().map(b=>{const w=(b.high+b.low+2*b.close)/4;
     return `<tr><td>${new Date(b.time*1000).toISOString().slice(0,19).replace('T',' ')}</td><td>${b.open}</td><td>${b.high}</td><td>${b.low}</td><td>${b.close}</td><td>${b.volume.toFixed(2)}</td><td>${(b.volume*b.close).toFixed(2)}</td><td>${w.toFixed(2)}</td></tr>`}).join('');
   $('chart_table').hidden=false};
+
+// ---- chart image export (watermark + title + panes) ----
+const WATERMARK_TEXT='chartsbtc.github.io/btccharts';
+function isLikelyIOS(){
+  return /iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+}
+function isMobileUa(){
+  return isLikelyIOS()||/Mobi|Android/i.test(navigator.userAgent);
+}
+function chartTitleLine(){
+  const scale=$('p').checked?'Percentage':($('l').checked?'Log':'Linear');
+  if($('cy').checked){
+    const align={low:'low',high:'high',halving:'halving date',calendar:'4-year calendar'}[$('ca').value]||$('ca').value;
+    const mode={usd:'stacked USD',low:'multiple of low',high:'% of cycle high',day0:'relative to day 0'}[$('cp').value]||$('cp').value;
+    return `Cycles aligned by ${align} · ${mode}`+($('l').checked?' · Log':'');
+  }
+  const m=currentMarket();
+  const name=m==='combinedUSD'?'BTC/USD Combined':('BTC/USD '+marketLabel(m).replace(/ \(USD\)/,''));
+  let days=60;
+  if(typeof isCyclePreset==='function'&&isCyclePreset($('r').value)&&bars.length){
+    days=(bars.at(-1).time-bars[0].time)/86400;
+  }else if($('c').checked&&$('s').value){
+    const end=Date.parse($('e').value)||Date.now();
+    days=Math.max(1,(end-Date.parse($('s').value))/864e5);
+  }else if($('r').value) days=+$('r').value||60;
+  else if(bars.length) days=Math.max(1,(bars.at(-1).time-bars[0].time)/86400);
+  const interval=$('i').value||autoInterval(days);
+  const preset=(typeof isCyclePreset==='function'&&isCyclePreset($('r').value))
+    ?($('r').selectedOptions[0]?$('r').selectedOptions[0].text+' · ':'')
+    :'';
+  return `${name} · ${preset}${interval} · ${scale}`;
+}
+function exportFilename(){
+  const slug=chartTitleLine().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+  return 'btccharts-'+(slug||'chart')+'.png';
+}
+function canvasToBlob(canvas){
+  return new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('toBlob failed')),'image/png'));
+}
+function downloadBlob(blob,name){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);
+}
+function flashCopyStatus(msg){
+  const el=$('copyStatus'); if(!el)return;
+  el.textContent=msg; el.hidden=false;
+  clearTimeout(flashCopyStatus._t);
+  flashCopyStatus._t=setTimeout(()=>{el.hidden=true},2500);
+}
+function paintWatermark(ctx,x,y,w,h,dpr,opts){
+  opts=opts||{};
+  const size=Math.max(11,Math.round(13*dpr));
+  ctx.save();
+  ctx.font=`${size}px Verdana,Arial,sans-serif`;
+  ctx.textBaseline='bottom';
+  ctx.textAlign='left';
+  // Sit in the plot, above the time axis (and above volume if it is on).
+  let left=14*dpr, bottom=36*dpr;
+  if(opts.cycles) left=72*dpr;
+  if(opts.volume) bottom=h*0.22+12*dpr;
+  const tx=x+left, ty=y+h-bottom;
+  ctx.lineWidth=Math.max(2,3*dpr);
+  ctx.strokeStyle='rgba(255,255,255,0.8)';
+  ctx.strokeText(WATERMARK_TEXT,tx,ty);
+  ctx.fillStyle='rgba(40,40,40,0.4)';
+  ctx.fillText(WATERMARK_TEXT,tx,ty);
+  ctx.restore();
+}
+function waitPaint(){
+  return new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+}
+async function composeChartImage(){
+  if(!charts.length) throw new Error('No chart to export');
+  await waitPaint();
+  const panes=charts.map((c,i)=>{
+    const cv=c.takeScreenshot();
+    const el=c.chartElement();
+    const host=el&&el.parentElement;
+    const lbl=i>0&&host?host.querySelector('.lbl'):null;
+    const cssW=(el&&el.clientWidth)||cv.width;
+    return {cv,label:lbl?lbl.textContent:'',cssW};
+  });
+  const dpr=panes[0].cv.width/Math.max(1,panes[0].cssW);
+  const width=Math.max(...panes.map(p=>p.cv.width));
+  const pad=Math.round(16*dpr);
+  const title=chartTitleLine();
+  const titleSize=Math.round(15*dpr);
+  const titleH=Math.round(28*dpr);
+  const legendItems=($('cy').checked&&typeof cycleSeries!=='undefined')?cycleSeries:[];
+  const legendRow=legendItems.length?Math.round(20*dpr):0;
+  const legendRows=legendItems.length?Math.ceil(legendItems.length/3):0;
+  const legendH=legendRows*legendRow;
+  let totalH=pad+titleH+legendH+pad;
+  for(const p of panes) totalH+=p.cv.height;
+  const canvas=document.createElement('canvas');
+  canvas.width=width+0;
+  canvas.height=totalH;
+  const ctx=canvas.getContext('2d');
+  ctx.fillStyle='#fff';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle='#222';
+  ctx.font=`${titleSize}px Verdana,Arial,sans-serif`;
+  ctx.textBaseline='top';
+  ctx.fillText(title,pad,pad);
+  let y=pad+titleH;
+  if(legendItems.length){
+    ctx.font=`${Math.round(12*dpr)}px Verdana,Arial,sans-serif`;
+    ctx.textBaseline='middle';
+    let cx=pad, cy=y+legendRow/2, maxW=width-pad*2;
+    const box=Math.round(10*dpr), gap=Math.round(14*dpr);
+    for(const line of legendItems){
+      const label=(line.label||'')+(line.open?' (in progress)':'');
+      const tw=ctx.measureText(label).width+box+Math.round(6*dpr)+gap;
+      if(cx+tw>pad+maxW){cx=pad;cy+=legendRow}
+      ctx.fillStyle=line.color||'#333';
+      ctx.fillRect(cx,cy-box/2,box,box);
+      ctx.fillStyle='#333';
+      ctx.fillText(label,cx+box+Math.round(5*dpr),cy);
+      cx+=tw;
+    }
+    y+=legendH;
+  }
+  let mainY=y, mainH=panes[0].cv.height;
+  for(const [i,p] of panes.entries()){
+    const x=Math.round((width-p.cv.width)/2);
+    ctx.drawImage(p.cv,x,y);
+    if(p.label){
+      ctx.font=`${Math.round(11*dpr)}px Verdana,Arial,sans-serif`;
+      ctx.textBaseline='top';
+      const tx=x+Math.round(6*dpr), ty=y+Math.round(4*dpr);
+      const tw=ctx.measureText(p.label).width+Math.round(6*dpr);
+      ctx.fillStyle='rgba(255,255,255,0.85)';
+      ctx.fillRect(tx-2,ty-1,tw,Math.round(14*dpr));
+      ctx.fillStyle='#555';
+      ctx.fillText(p.label,tx,ty);
+    }
+    if(i===0){mainY=y;mainH=p.cv.height}
+    y+=p.cv.height;
+  }
+  paintWatermark(ctx,0,mainY,width,mainH,dpr,{cycles:!!$('cy').checked,volume:!$('cy').checked&&!!$('v').checked});
+  return canvas;
+}
+async function copyChartImage(e){
+  if(e) e.preventDefault();
+  try{
+    const canvas=await composeChartImage();
+    const blob=await canvasToBlob(canvas);
+    const file=new File([blob],exportFilename(),{type:'image/png'});
+    try{
+      if(!navigator.clipboard||!window.ClipboardItem) throw new Error('clipboard unavailable');
+      const payload=isLikelyIOS()?Promise.resolve(blob):blob;
+      await navigator.clipboard.write([new ClipboardItem({'image/png':payload})]);
+      flashCopyStatus('Copied');
+    }catch(err){
+      if(isMobileUa()&&typeof navigator.share==='function'){
+        try{
+          const share={files:[file],title:chartTitleLine(),text:WATERMARK_TEXT};
+          if(!navigator.canShare||navigator.canShare({files:[file]})){
+            await navigator.share(share);
+            return canvas;
+          }
+        }catch(err2){ if(err2&&err2.name==='AbortError') return canvas; }
+      }
+      downloadBlob(blob,exportFilename());
+      flashCopyStatus('Downloaded');
+    }
+    return canvas;
+  }catch(err){
+    flashCopyStatus('Export failed');
+    throw err;
+  }
+}
+async function downloadChartPng(e){
+  if(e) e.preventDefault();
+  const canvas=await composeChartImage();
+  downloadBlob(await canvasToBlob(canvas),exportFilename());
+  flashCopyStatus('Downloaded');
+  return canvas;
+}
+// Headless tests and bookmarklets use the same compose path.
+window.composeChartImage=composeChartImage;
+window.exportChartPng=async()=>canvasToBlob(await composeChartImage());
+
 // ---- events ----
 document.querySelectorAll('#scaleToggle button').forEach(b=>b.onclick=()=>{const want=b.dataset.l==='1';
   if($('l').checked===want&&!$('p').checked)return;$('l').checked=want;$('p').checked=false;draw(1)});
@@ -259,6 +448,8 @@ const shift=d=>{if(!$('c').checked){$('c').checked=true;setCustomDefaults();sync
   for(const id of['s','e'])$(id).value=fmtD(new Date(Date.parse($(id).value)+d*864e5));draw(1)};
 $('Prev').onclick=()=>shift(-1);$('Next').onclick=()=>shift(1);
 $('getPermalink').onclick=e=>{e.preventDefault();$('permalinkbox').hidden=!$('permalinkbox').hidden;$('permalink').select()};
+$('copyImage').onclick=copyChartImage;
+$('downloadPng').onclick=downloadChartPng;
 $('larger').onclick=e=>{e.preventDefault();document.body.classList.toggle('wide')};
 window.onpopstate=()=>{parseHash(location.hash.slice(1));syncCustom();syncViewToggle();draw(0)};
 // init: original defaults = 60 days, candlestick, MA 10/25 lengths, volume on

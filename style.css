@@ -50,8 +50,12 @@ table.cycles em{color:#888;font-style:italic;font-size:10px}
 
 #chartStage{position:relative}
 #chartWatermark{
-  position:absolute;left:12px;bottom:28px;z-index:6;pointer-events:none;user-select:none;
-  color:rgba(40,40,40,0.38);font:12px/1.2 Verdana,Arial,sans-serif;letter-spacing:.02em;
+  position:absolute;left:14px;bottom:36px;z-index:6;pointer-events:none;user-select:none;
+  color:rgba(40,40,40,0.4);font:12px/1.2 Verdana,Arial,sans-serif;letter-spacing:.02em;
   text-shadow:0 0 3px #fff,0 0 6px #fff,0 1px 0 #fff;
 }
-#main.cycles + #chartWatermark, body.cycles-view #chartWatermark{bottom:32px}
+body.cycles-view #chartWatermark{left:72px;bottom:38px}
+#charts.has-volume #chartWatermark{bottom:calc(22% + 12px)}
+body.cycles-view #charts.has-volume #chartWatermark{bottom:38px}
+
+#copyStatus{color:#2e7d32;font-weight:bold;margin-left:6px}
