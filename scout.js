@@ -173,6 +173,187 @@ function percentiles(values, ps){
   });
 }
 
+
+const DEFAULT_PCT_LIST='1, 5, 20, 50, 80, 95, 99';
+function parsePctList(s){
+  const raw=s!=null?s:(($('pb')&&$('pb').value)||DEFAULT_PCT_LIST);
+  const out=[];
+  for(const part of String(raw).split(/[,\s]+/)){
+    if(!part) continue;
+    const n=parseFloat(part);
+    if(isFinite(n)&&n>=0&&n<=100) out.push(+n);
+  }
+  return [...new Set(out)].sort((a,b)=>a-b);
+}
+function percentileRank(values, v){
+  const a=values.filter(x=>x!=null&&isFinite(x)).slice().sort((x,y)=>x-y);
+  if(!a.length||v==null||!isFinite(v)) return null;
+  let le=0;
+  for(const x of a){ if(x<=v) le++; else break; }
+  return 100*le/a.length;
+}
+function ordinalPct(n){
+  if(n==null||!isFinite(n)) return '';
+  const s=Math.round(n);
+  const m=Math.abs(s)%100, d=Math.abs(s)%10;
+  const suf=(m>=11&&m<=13)?'th':d===1?'st':d===2?'nd':d===3?'rd':'th';
+  return s+suf;
+}
+function pctBandColor(p){
+  const t=Math.max(0,Math.min(1,(+p)/100));
+  const hex=c=>('0'+Math.round(c).toString(16)).slice(-2);
+  const lerp=(a,b,u)=>a+(b-a)*u;
+  const parse=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
+  const A=t<0.5?parse('#1565c0'):parse('#f9a825');
+  const B=t<0.5?parse('#9e9e9e'):parse('#c62828');
+  const u=t<0.5?t/0.5:(t-0.5)/0.5;
+  return '#'+hex(lerp(A[0],B[0],u))+hex(lerp(A[1],B[1],u))+hex(lerp(A[2],B[2],u));
+}
+function formatBandPrice(v){
+  if(!(v>0)) return '';
+  if(v>=1000) return '$'+Math.round(v).toLocaleString('en-US');
+  return '$'+usd(v);
+}
+function attachRatioPercentiles(computed){
+  if(!computed||!computed.points||!computed.points.length) return computed;
+  const list=parsePctList();
+  const vals=computed.points.map(p=>p.value);
+  const levels=list.map(p=>({p,value:percentiles(vals,[p])[0],color:pctBandColor(p)}));
+  const rankByTime=new Map();
+  for(const p of computed.points) rankByTime.set(p.time, percentileRank(vals,p.value));
+  computed.pctList=list;
+  computed.pctLevels=levels;
+  computed.pctRank=computed.last?rankByTime.get(computed.last.time):null;
+  computed.pctRankByTime=rankByTime;
+  lastRatio=computed;
+  return computed;
+}
+function ratioRankText(computed){
+  if(!computed||!computed.last) return '';
+  const name=computed.short||computed.title||'Ratio';
+  let s=name+' '+formatRatioValue(computed.last.value);
+  if(computed.pctRank!=null) s+=', '+ordinalPct(computed.pctRank)+' pct';
+  return s;
+}
+function addRatioPctLines(ls, computed){
+  if(!ls||!computed||!computed.pctLevels) return;
+  for(const lv of computed.pctLevels){
+    if(lv.value==null||!isFinite(lv.value)) continue;
+    ls.createPriceLine({price:lv.value,color:lv.color||'#888',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:lv.p+'%: '+formatRatioValue(lv.value)});
+  }
+}
+function priceBandsOn(){return !!($('pbp')&&$('pbp').checked)}
+function projectPlOverlay(fromTime, fit, tEnd){
+  if(!fit||!(fromTime>0)) return [];
+  const end=tEnd||(typeof daysTo2030==='function'?GENESIS+daysTo2030()*86400:fromTime);
+  if(!(end>fromTime)) return [];
+  const n=80, out=[];
+  for(let i=1;i<=n;i++){
+    const t=Math.round(fromTime+(end-fromTime)*i/n);
+    const d=daysSinceGenesis(t);
+    const o=d>0?powerLawPrice(d,fit.a,fit.b):null;
+    if(o>0) out.push({time:t,overlay:o});
+  }
+  return out;
+}
+function addPricePercentileBands(chart, computed, opts){
+  opts=opts||{};
+  if(!priceBandsOn()||!chart||!computed||!computed.pctLevels||!computed.points) return [];
+  let extras=[];
+  if(opts.project!==false && (computed.kind==='pl'||opts.fit)){
+    const fit=opts.fit||window.lastPowerFit||(typeof fitPowerLaw==='function'?fitPowerLaw((bars||[]).filter(b=>b&&b.close>0)):null);
+    if(fit) extras=projectPlOverlay(computed.points.at(-1).time, fit, opts.tEnd);
+  }
+  const series=[];
+  for(const lv of computed.pctLevels){
+    if(lv.value==null||!isFinite(lv.value)) continue;
+    const data=computed.points.map(pt=>({time:pt.time,value:lv.value*pt.overlay}))
+      .concat(extras.map(p=>({time:p.time,value:lv.value*p.overlay})));
+    if(!data.length) continue;
+    const last=data.at(-1).value;
+    const s=chart.addLineSeries({
+      color:lv.color||'#888',
+      lineWidth:1,
+      lineStyle:2,
+      priceLineVisible:false,
+      lastValueVisible:true,
+      crosshairMarkerVisible:false,
+      title:lv.p+'% '+formatBandPrice(last),
+    });
+    s.setData(data);
+    series.push(s);
+  }
+  return series;
+}
+function drawUplotHLines(u, pr, levels, opts){
+  opts=opts||{};
+  const ctx=u.ctx;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(u.bbox.left,u.bbox.top,u.bbox.width,u.bbox.height);
+  ctx.clip();
+  ctx.font=(10*pr)+'px Verdana,Arial,sans-serif';
+  ctx.textBaseline='bottom';
+  ctx.textAlign='right';
+  const right=u.bbox.left+u.bbox.width-2*pr;
+  for(const lv of levels||[]){
+    const yv=opts.yOf?opts.yOf(lv):lv.value;
+    const y=u.valToPos(yv,'y',true);
+    if(!isFinite(y)) continue;
+    ctx.beginPath();
+    ctx.moveTo(u.bbox.left,y);
+    ctx.lineTo(u.bbox.left+u.bbox.width,y);
+    ctx.strokeStyle=lv.color||opts.color||'#888';
+    ctx.lineWidth=1*pr;
+    ctx.setLineDash([6*pr,5*pr]);
+    ctx.stroke();
+    const fmt=opts.format||formatRatioValue;
+    const label=opts.label?opts.label(lv):((lv.p!=null?lv.p+'%: ':'')+fmt(yv));
+    if(label){
+      ctx.setLineDash([]);
+      ctx.fillStyle=lv.color||'#555';
+      ctx.fillText(label, right, y-2*pr);
+    }
+  }
+  ctx.restore();
+}
+function drawUplotPriceBands(u, pr, computed, fit, xMax){
+  if(!priceBandsOn()||!computed||!computed.pctLevels||!fit) return;
+  const ctx=u.ctx;
+  const d0=Math.max(u.scales.x.min||1,1e-6), dEnd=xMax||u.scales.x.max;
+  if(!(dEnd>d0)) return;
+  const N=240;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(u.bbox.left,u.bbox.top,u.bbox.width,u.bbox.height);
+  ctx.clip();
+  ctx.font=(10*pr)+'px Verdana,Arial,sans-serif';
+  ctx.textAlign='right';
+  ctx.textBaseline='bottom';
+  for(const lv of computed.pctLevels){
+    if(!(lv.value>0)) continue;
+    ctx.beginPath();
+    for(let i=0;i<=N;i++){
+      const d=d0*Math.pow(dEnd/d0,i/N);
+      const p=powerLawPrice(d,fit.a,fit.b)*lv.value;
+      const x=u.valToPos(d,'x',true), y=u.valToPos(p,'y',true);
+      i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+    }
+    ctx.strokeStyle=lv.color||'#888';
+    ctx.lineWidth=1.25*pr;
+    ctx.setLineDash([6*pr,5*pr]);
+    ctx.stroke();
+    const pLast=powerLawPrice(dEnd,fit.a,fit.b)*lv.value;
+    const y=u.valToPos(pLast,'y',true);
+    if(isFinite(y)){
+      ctx.setLineDash([]);
+      ctx.fillStyle=lv.color||'#555';
+      ctx.fillText(lv.p+'% '+formatBandPrice(pLast), u.bbox.left+u.bbox.width-2*pr, y-2*pr);
+    }
+  }
+  ctx.restore();
+}
+
 function computeRatio(bars, kind){
   kind=kind||ratioKind();
   lastRatio=null;
@@ -241,6 +422,7 @@ function addRatioPanel(computed, opts){
   const log=opts.log!=null?!!opts.log:!!($('rpl')&&$('rpl').checked);
   const ch=mkChart(el,{timeScale:{visible:!!opts.timeVisible}});
   if(opts.sync!==false) charts.push(ch);
+  attachRatioPercentiles(computed);
   const ls=ch.addLineSeries({
     color:opts.color||'#1565c0',
     lineWidth:1.5,
@@ -250,6 +432,13 @@ function addRatioPanel(computed, opts){
   });
   ls.setData(computed.points.map(p=>({time:p.time,value:p.value})));
   ls.createPriceLine({price:1,color:'#e53935',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'1.0'});
+  addRatioPctLines(ls, computed);
+  const bandVals=(computed.pctLevels||[]).map(lv=>lv.value).filter(v=>v!=null&&isFinite(v)&&v>0);
+  if(bandVals.length){
+    const t0=computed.points[0].time, t1=computed.points.at(-1).time;
+    const ghost=ch.addLineSeries({color:'rgba(0,0,0,0)',lineVisible:false,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});
+    ghost.setData([{time:t0,value:Math.min(...bandVals,1)},{time:t1,value:Math.max(...bandVals,1)}]);
+  }
   ch.priceScale('right').applyOptions({
     mode:log?LW.PriceScaleMode.Logarithmic:LW.PriceScaleMode.Normal,
     scaleMargins:{top:.08,bottom:.08},
@@ -275,6 +464,25 @@ window.addRatioPanel=addRatioPanel;
 window.ensureRatioOverlay=ensureRatioOverlay;
 window.formatRatioValue=formatRatioValue;
 window.ratioKind=ratioKind;
+window.parsePctList=parsePctList;
+window.percentileRank=percentileRank;
+window.ordinalPct=ordinalPct;
+window.pctBandColor=pctBandColor;
+window.attachRatioPercentiles=attachRatioPercentiles;
+window.ratioRankText=ratioRankText;
+window.addRatioPctLines=addRatioPctLines;
+window.addPricePercentileBands=addPricePercentileBands;
+window.priceBandsOn=priceBandsOn;
+window.DEFAULT_PCT_LIST=DEFAULT_PCT_LIST;
+window.pctBandHeaders=function(c){return (!c||!c.pctLevels||!c.pctLevels.length)?[]:c.pctLevels.map(lv=>lv.p+'% band').concat(['Percentile rank'])};
+window.pctBandCells=function(c,overlay,time){
+  if(!c||!c.pctLevels||!c.pctLevels.length) return [];
+  const cells=c.pctLevels.map(lv=>overlay>0&&lv.value!=null?String(+(overlay*lv.value).toPrecision(6)):'');
+  const r=time!=null&&c.pctRankByTime?c.pctRankByTime.get(time):null;
+  cells.push(r!=null?r.toFixed(1):'');
+  return cells;
+};
+
 
 
 // ---- scout views ----
@@ -411,6 +619,7 @@ function renderPowerLawView(){
   const sample=bars.filter(b=>b&&b.close>0);
   const fit=fitPowerLaw(sample);
   const ratio=computeRatio(bars,'pl');
+  if(ratio) attachRatioPercentiles(ratio);
   if(!fit){status('Not enough data for a power law fit.');return}
   const xs=[],ys=[],ratioY=[],aheadY=[],barAt=[];
   for(const b of sample){
@@ -431,7 +640,7 @@ function renderPowerLawView(){
   const el=$('plLegend');
   if(el){
     el.hidden=false;
-    el.textContent=powerLawLegendText(fit)+'   ·   Years ahead  '+yaText;
+    el.textContent=powerLawLegendText(fit)+'   ·   Years ahead  '+yaText+(ratio&&ratioRankText(ratio)?'   ·   '+ratioRankText(ratio):'');
   }
 
   const main=$('main');
@@ -506,12 +715,12 @@ function renderPowerLawView(){
 
   makeScoutUplot(main,xs,ys,{
     xMin,xMax,xLabels:true,stroke:'#1565c0',lineWidth:1.5,
-    onDraw:(u,pr)=>drawFit(u,pr),
+    onDraw:(u,pr)=>{drawFit(u,pr); if(ratio) drawUplotPriceBands(u,pr,ratio,fit,xMax);},
     yFormat:v=>v>=1000?compact(v):(v>=1?String(+v.toPrecision(3)):String(+v.toPrecision(2))),
   });
   makeScoutUplot(rHost,xs,ratioY,{
     xMin,xMax,xLabels:false,stroke:'#1565c0',title:'Price / Power Law',
-    onDraw:(u,pr)=>drawHLine(u,pr,1,'#e53935'),
+    onDraw:(u,pr)=>{drawHLine(u,pr,1,'#e53935'); if(ratio&&ratio.pctLevels) drawUplotHLines(u,pr,ratio.pctLevels);},
     yFormat:v=>formatRatioValue(v),
   });
   makeScoutUplot(aHost,xs,aheadY,{
@@ -545,7 +754,12 @@ function renderPowerLawView(){
     if(i==null||!barAt[i]){$('legend').textContent='';return}
     const b=barAt[i], d=xs[i];
     const bits=[isoUTC(b.time),'day '+d.toFixed(0),'$'+usd(b.close)];
-    if(ratioY[i]!=null) bits.push('Price/PL '+formatRatioValue(ratioY[i]));
+    if(ratioY[i]!=null){
+      let rtxt='Price/PL '+formatRatioValue(ratioY[i]);
+      const rk=ratio&&ratio.pctRankByTime?ratio.pctRankByTime.get(b.time):null;
+      if(rk!=null) rtxt+=' ('+ordinalPct(rk)+' pct)';
+      bits.push(rtxt);
+    }
     if(aheadY[i]!=null) bits.push('Years ahead '+formatYearsMonths(aheadY[i]));
     $('legend').textContent=bits.join('  ·  ');
   };
@@ -554,7 +768,7 @@ function renderPowerLawView(){
   // Listen on mousemove of each root.
   scoutPlots.forEach(u=>{
     u.root.addEventListener('mousemove',()=>setLeg(u));
-    u.root.addEventListener('mouseleave',()=>{$('legend').textContent=yaText?'Years ahead  '+yaText:''});
+    u.root.addEventListener('mouseleave',()=>{$('legend').textContent=[yaText?'Years ahead  '+yaText:'', ratio?ratioRankText(ratio):''].filter(Boolean).join('  ·  ')});
   });
 }
 
@@ -957,10 +1171,18 @@ async function renderPriceMaView(){
   }).filter(p=>p.value!=null);
   ch.addLineSeries({color:'#e53935',lineWidth:2,priceLineVisible:false,lastValueVisible:false,title:spec.name}).setData(maPts);
   addRatioPanel(computed,{log:true,big:true});
+  addPricePercentileBands(ch, computed);
+
   hookLegend(ch,t=>{
     const b=shown.find(x=>x.time===t); if(!b) return '';
     const p=points.find(x=>x.time===t);
-    return isoUTC(t)+'  ·  $'+usd(b.close)+(p?'  ·  '+spec.name+' $'+usd(p.overlay)+'  ·  '+computed.title+' '+formatRatioValue(p.value):'');
+    let text=isoUTC(t)+'  ·  $'+usd(b.close);
+    if(p){
+      text+='  ·  '+spec.name+' $'+usd(p.overlay)+'  ·  '+computed.title+' '+formatRatioValue(p.value);
+      const rank=computed.pctRankByTime?computed.pctRankByTime.get(p.time):null;
+      if(rank!=null) text+=' ('+ordinalPct(rank)+' pct)';
+    }
+    return text;
   });
   syncScoutLw();
 }

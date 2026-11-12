@@ -124,3 +124,6 @@ body.scout-returns #returnsOpts{display:inline-flex}
 body.scout-returns.mode-mult #rnBox{display:none}
 body.scout-returns #scaleToggle,body.scout-returns #markerBox,body.scout-returns #ratioBox,body.scout-returns #ratioLogBox{display:none}
 body.scout-returns #main{height:480px}
+
+body.has-pct-bands #pctBandOpts{display:inline-flex}
+#pctBandOpts input[type="text"],#pctBandOpts input#pb{font-size:12px;width:160px}
