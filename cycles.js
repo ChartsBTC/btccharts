@@ -38,6 +38,17 @@ function cyclePriceFormat(v, mode){
   }
   return compact(v);
 }
+
+// Reference USD price for the open (current) cycle: start low, peak, or day-0 close.
+function currentCycleScaleRef(lines, mode){
+  const line=lines.find(l=>l.open||(l.cycle&&l.cycle.open))||lines.find(l=>l.cycle)||(lines&&lines.at(-1));
+  const cur=line&&line.cycle;
+  if(!cur) return null;
+  if(mode==='low') return cur.startLow.price;
+  if(mode==='high') return cur.high.price;
+  if(mode==='day0') return (line.ctx&&line.ctx.day0Value)||null;
+  return null;
+}
 function cycleModeLabel(mode){
   return {usd:'raw USD',low:'1x at cycle low',high:'% of cycle high',day0:'1x at day 0'}[mode]||mode;
 }

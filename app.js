@@ -66,35 +66,113 @@ async function drawCycles(){
   const align=$('ca').value||'low';
   const mode=$('cp').value||CYCLE_PRICE_MODE;
   cycleSeries=buildCycleSeries(all,cycles,align,mode);
-  status(`${cycleSeries.length} cycles · Combined daily · align by ${align} · ${cycleModeLabel(mode)}`);
+  let statusExtra=cycleModeLabel(mode);
+  if(mode!=='usd'){
+    const ref=currentCycleScaleRef(cycleSeries,mode);
+    if(ref) statusExtra+=(mode==='high'
+      ?` · right axis: current cycle (100% = $${usd(ref)})`
+      :` · right axis: current cycle (1x = $${usd(ref)})`);
+  }
+  status(`${cycleSeries.length} cycles · Combined daily · align by ${align} · ${statusExtra}`);
   if($('sourceNote')) $('sourceNote').textContent='Cycles use Combined history (daily). '+SPLICE;
   $('cycleTable').innerHTML=cycleTableHtml(cycles);
   $('cycleLegend').innerHTML=cycleLegendHtml(cycleSeries);
   renderCycles(align,mode);
   clear_table();
 }
+function cycleUsdAxisFormat(v, isLog){
+  if(v==null||!isFinite(v)||v<=0)return '';
+  if(isLog) return '$'+compact(v);
+  if(v>=100) return '$'+v.toLocaleString('en-US',{maximumFractionDigits:0});
+  return '$'+(+v.toPrecision(3));
+}
+function scaledVisibleMinMax(lines, chart){
+  let from=-Infinity,to=Infinity;
+  const vr=chart.timeScale().getVisibleRange();
+  if(vr){from=vr.from;to=vr.to}
+  let min=Infinity,max=-Infinity;
+  for(const line of lines){
+    for(const p of line.pts){
+      if(p.value==null||!(p.value>0)) continue;
+      if(p.time<from||p.time>to) continue;
+      if(p.value<min)min=p.value;
+      if(p.value>max)max=p.value;
+    }
+  }
+  if(!isFinite(min)) return null;
+  if(!(max>min)){max=min*1.01;min=min*0.99}
+  return {min,max};
+}
 function renderCycles(align, mode){
   clearCharts();syncScaleToggle();
   mode=mode||$('cp').value||'usd';
   const isLog=$('l').checked;
-  const fmt=v=>{
+  const stacked=mode==='usd';
+  const ref=stacked?null:currentCycleScaleRef(cycleSeries,mode);
+  const mul=(!stacked&&ref)?(mode==='high'?ref/100:ref):null;
+  const leftFmt=v=>{
     if(v==null||!isFinite(v)||v<=0)return '';
-    if(mode==='usd') return isLog?compact(v):v.toLocaleString('en-US',{maximumFractionDigits:v>=100?0:2});
+    if(stacked) return isLog?compact(v):v.toLocaleString('en-US',{maximumFractionDigits:v>=100?0:2});
     return cyclePriceFormat(v, mode);
   };
-  const main=mkChart($('main'),{localization:{priceFormatter:fmt,timeFormatter:t=>'Day '+cycleAxisLabel(t)},
+  const rightFmt=v=>cycleUsdAxisFormat(v,isLog);
+  const scaleMode=isLog?LW.PriceScaleMode.Logarithmic:LW.PriceScaleMode.Normal;
+  const margins={top:.08,bottom:.06};
+  // Do not set localization.priceFormatter in scaled mode: it overrides every scale
+  // and would paint the right-axis USD ticks with the left-axis “x” / “%” formatter.
+  const loc=stacked
+    ? {priceFormatter:leftFmt,timeFormatter:t=>'Day '+cycleAxisLabel(t)}
+    : {timeFormatter:t=>'Day '+cycleAxisLabel(t)};
+  const main=mkChart($('main'),{localization:loc,
+    leftPriceScale:{visible:!stacked,borderColor:'#ccc',scaleMargins:margins,minimumWidth:56},
+    rightPriceScale:{visible:true,borderColor:'#ccc',scaleMargins:margins,minimumWidth:80},
     timeScale:{borderColor:'#ccc',timeVisible:true,secondsVisible:false,minBarSpacing:0.05,rightOffset:4,
       tickMarkFormatter:(t)=>cycleAxisLabel(t)}});
   charts.push(main);
-  main.priceScale('right').applyOptions({mode:isLog?LW.PriceScaleMode.Logarithmic:LW.PriceScaleMode.Normal,scaleMargins:{top:.08,bottom:.06}});
+  if(!stacked) main.priceScale('left').applyOptions({mode:scaleMode,scaleMargins:margins,minimumWidth:56});
+  main.priceScale('right').applyOptions({mode:scaleMode,scaleMargins:margins,minimumWidth:80});
   const refs=[];
+  const byTime=new Map();
   for(const line of cycleSeries){
+    const data=line.pts.filter(p=>p.value!=null&&p.value>0).map(p=>({time:p.time,value:p.value}));
+    for(const p of data){
+      const slot=byTime.get(p.time)||{min:p.value,max:p.value};
+      if(p.value<slot.min)slot.min=p.value;
+      if(p.value>slot.max)slot.max=p.value;
+      byTime.set(p.time,slot);
+    }
     const s=main.addLineSeries({color:line.color,lineWidth:line.open?3:2,priceLineVisible:false,lastValueVisible:true,
-      title:String(line.cycle?line.cycle.year:line.anchorLabel||''),crosshairMarkerRadius:4});
-    s.setData(line.pts.filter(p=>p.value!=null&&p.value>0).map(p=>({time:p.time,value:p.value})));
+      title:String(line.cycle?line.cycle.year:line.anchorLabel||''),crosshairMarkerRadius:4,
+      priceScaleId:stacked?'right':'left',
+      priceFormat:{type:'custom',formatter:leftFmt,minMove:0.0001},
+      autoscaleInfoProvider: stacked?undefined:()=>{
+        const r=scaledVisibleMinMax(cycleSeries,main);
+        if(!r) return null;
+        return {priceRange:{minValue:r.min,maxValue:r.max}};
+      }});
+    s.setData(data);
     const marks=cycleMarkers(line,align);
     if(marks.length) s.setMarkers(marks);
     refs.push({s,line});
+  }
+  // Invisible right-scale envelopes: value = scaled * current-cycle reference, so
+  // the right axis is current-cycle USD and stays locked to the left multiple/% axis.
+  if(!stacked && mul && byTime.size){
+    const times=[...byTime.keys()].sort((a,b)=>a-b);
+    const lo=times.map(t=>({time:t,value:byTime.get(t).min*mul}));
+    const hi=times.map(t=>({time:t,value:byTime.get(t).max*mul}));
+    const ghostOpt={
+      color:'rgba(0,0,0,0)',lineVisible:false,priceLineVisible:false,lastValueVisible:false,
+      crosshairMarkerVisible:false,pointMarkersVisible:false,priceScaleId:'right',
+      priceFormat:{type:'custom',formatter:rightFmt,minMove:0.01},
+      autoscaleInfoProvider:()=>{
+        const r=scaledVisibleMinMax(cycleSeries,main);
+        if(!r) return null;
+        return {priceRange:{minValue:r.min*mul,maxValue:r.max*mul}};
+      }
+    };
+    const g1=main.addLineSeries(ghostOpt); g1.setData(lo);
+    const g2=main.addLineSeries({...ghostOpt}); g2.setData(hi);
   }
   main.timeScale().fitContent();setTimeout(()=>main.timeScale().fitContent(),50);
   main.subscribeCrosshairMove(p=>{
@@ -108,9 +186,9 @@ function renderCycles(align, mode){
       const bar=pt&&pt.bar;
       const name=line.cycle?line.cycle.year:line.label.split(' ')[0];
       const date=bar?isoUTC(bar.time):'';
-      const usdPx=bar?(' $'+usd(bar.close)):'';
-      const scaled=(mode!=='usd')?(' '+cyclePriceFormat(v.value,mode)):'';
-      bits.push(`${name}${date?' '+date:''}${usdPx}${scaled}`);
+      const usdPx=bar?('$'+usd(bar.close)):'';
+      if(mode==='usd') bits.push(`${name}${date?' '+date:''} ${usdPx}`.trim());
+      else bits.push(`${name}${date?' '+date:''} ${cyclePriceFormat(v.value,mode)} ${usdPx}`.replace(/ +/g,' ').trim());
     }
     $('legend').textContent=bits.join('  ·  ');
   });
