@@ -81,3 +81,7 @@ body.cycles-view #plLegend{display:none}
 #shareMenu{position:absolute;left:0;top:calc(100% + 4px);z-index:30;min-width:148px;padding:4px 0;background:#fff;border:1px solid #ccc;box-shadow:0 2px 8px rgba(0,0,0,.15)}
 #shareMenu button{display:block;width:100%;margin:0;border:0;background:none;text-align:left;font:12px/1.4 Verdana,Arial,sans-serif;color:#105cb6;padding:6px 12px;cursor:pointer}
 #shareMenu button:hover,#shareMenu button:focus{background:#f3f3f3;outline:none}
+
+#epochLegend{display:none;flex-wrap:wrap;gap:8px 16px;margin:0 0 8px;font-size:12px}
+#epochLegend:not([hidden]){display:flex}
+body.cycles-view #epochLegend{display:none}

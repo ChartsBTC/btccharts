@@ -80,6 +80,7 @@
     <label><input type="checkbox" id="cl">Cycle lows</label>
     <label><input type="checkbox" id="hv">Halvings</label>
     <label><input type="checkbox" id="pl">Power Law</label>
+    <label><input type="checkbox" id="ep">Color by epoch</label>
   </span>
   <label id="cycleAlignBox" class="cycle-only">Align
     <select id="ca">
@@ -104,6 +105,7 @@
  </div>
  <div id="cycleLegend" class="cycle-only"></div>
  <div id="plLegend" hidden></div>
+ <div id="epochLegend" hidden></div>
  <div id="permalinkbox" hidden>Use this link to bookmark or share this chart. Select "Custom Time" for a permanent link to a specific date.<br><input id="permalink" readonly></div>
  <div id="charts"><div id="chartStage"><div id="main"></div><div id="chartWatermark" aria-hidden="true">chartsbtc.github.io/btccharts</div></div><div id="subs"></div></div>
  <div id="cycleTable" class="cycle-only"></div>
@@ -115,6 +117,7 @@
 <script src="vendor/uPlot.iife.min.js"></script>
 <script src="indicators.js"></script>
 <script src="cycles.js"></script>
+<script src="scout.js"></script>
 <script src="data.js"></script>
 <script src="app.js"></script>
 </body></html>

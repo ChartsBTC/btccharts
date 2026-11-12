@@ -1,6 +1,6 @@
 const $=id=>document.getElementById(id);
 const LW=LightweightCharts;
-const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','cy','ca','cp','ch','cl','hv','ll','pl'];
+const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','cy','ca','cp','ch','cl','hv','ll','pl','ep'];
 // populate indicator selects (only implemented ones, original naming)
 document.querySelectorAll('select.ind').forEach(s=>{s.innerHTML='<option value="">None</option>'+Object.entries(INDICATORS).map(([k,v])=>`<option value="${k}">${v.label.replace(/ \(.*/,'')}</option>`).join('')});
 
@@ -266,7 +266,7 @@ function drawPowerLawUplot(u,xs,barAt){
 }
 
 let plSeries={};
-function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view')}
+function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view');if(typeof setEpochLegend==='function')setEpochLegend(false)}
 
 async function draw(pushUrl){
   const hash=buildHash();
@@ -473,7 +473,7 @@ function renderLogLog(marks){
     ],
     series:[
       {label:'Days'},
-      {label:'USD',stroke:'#1a237e',width:2,points:{show:xs.length<=100},
+      {label:'USD',stroke:epochEnabled()?'rgba(0,0,0,0)':'#1a237e',width:2,points:{show:xs.length<=100},
         value:(u,v)=>v==null?'':'$'+(v>=100?Number(v).toLocaleString('en-US',{maximumFractionDigits:0}):(+v.toPrecision(3)))},
     ],
     hooks:{
@@ -484,6 +484,7 @@ function renderLogLog(marks){
         $('legend').textContent=isoUTC(b.time)+'  ·  day '+d.toFixed(0)+' since genesis  ·  O '+b.open+' H '+b.high+' L '+b.low+' C '+b.close;
       }],
       draw:[u=>{
+        if(epochEnabled()) drawEpochUplotLine(u,xs,barAt);
         drawPowerLawUplot(u,xs,barAt);
         const list=marks||lastMarks||[];
         if(!list.length){drawLogLogXLabels(u);return}
@@ -511,6 +512,7 @@ function renderLogLog(marks){
     },
   };
   uplot=new uPlot(opts,[xs,ys],host);
+  setEpochLegend(epochEnabled());
   if(window._llRo) window._llRo.disconnect();
   window._llRo=new ResizeObserver(()=>{
     if(!uplot) return;
@@ -533,12 +535,25 @@ function render(interval, marks){
   const O=bars.map(b=>b.open),H=bars.map(b=>b.high),L=bars.map(b=>b.low),C=bars.map(b=>b.close);
   const t=$('t').value;
   let mainSeries=null;
-  if(t==='S'){mainSeries=main.addCandlestickSeries({upColor:'#26a69a',downColor:'#ef5350',borderVisible:false,wickUpColor:'#26a69a',wickDownColor:'#ef5350'});mainSeries.setData(bars)}
+  const epOn=typeof epochEnabled==='function'&&epochEnabled();
+  if(epOn&&(t==='S'||t==='O')){
+    const ss=addEpochCandleSeries(main,bars,t);
+    mainSeries=ss[ss.length-1]||null;
+  }else if(epOn){
+    let vals=C;
+    if(t&&t!=='C'){
+      const f={M:i=>(H[i]+L[i])/2,T:i=>(H[i]+L[i]+C[i])/3,W:i=>(H[i]+L[i]+2*C[i])/4}[t];
+      if(f) vals=bars.map((_,i)=>f(i));
+    }
+    const ss=addEpochLineSeries(main,ser(vals),{lineWidth:2,lastValueVisible:true});
+    mainSeries=ss[ss.length-1]||null;
+  }else if(t==='S'){mainSeries=main.addCandlestickSeries({upColor:'#26a69a',downColor:'#ef5350',borderVisible:false,wickUpColor:'#26a69a',wickDownColor:'#ef5350'});mainSeries.setData(bars)}
   else if(t==='O'){mainSeries=main.addBarSeries({upColor:'#26a69a',downColor:'#ef5350',thinBars:false});mainSeries.setData(bars)}
   else if(t){const f={C:i=>C[i],M:i=>(H[i]+L[i])/2,T:i=>(H[i]+L[i]+C[i])/3,W:i=>(H[i]+L[i]+2*C[i])/4}[t];
     mainSeries=main.addLineSeries({color:'#1a237e',lineWidth:2});mainSeries.setData(ser(bars.map((_,i)=>f(i))))}
   else {mainSeries=main.addLineSeries({visible:false});mainSeries.setData(ser(C))} // keep scale with "None"
   if(mainSeries&&marks&&marks.length) mainSeries.setMarkers(marks);
+  setEpochLegend(epOn);
   const line=(arr,color,w=1,style=0)=>main.addLineSeries({color,lineWidth:w,lineStyle:style,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false}).setData(ser(arr));
   // price band
   const b=$('b').value;
@@ -590,12 +605,15 @@ function showTable(){
 }
 function toggleTable(e){if(e)e.preventDefault();if(tableOpen)clear_table();else showTable()}
 function fillPriceTable(){
-  setTableHead(PRICE_HEAD); tableCsv=[PRICE_HEAD.slice()];
+  const epOn=typeof epochEnabled==='function'&&epochEnabled();
+  const head=epOn?PRICE_HEAD.concat(['Epoch']):PRICE_HEAD;
+  setTableHead(head); tableCsv=[head.slice()];
   $('chart_table').tBodies[0].innerHTML=bars.slice().reverse().map(b=>{
     const w=(b.high+b.low+2*b.close)/4;
     const rec=[new Date(b.time*1000).toISOString().slice(0,19).replace('T',' '),
       String(b.open),String(b.high),String(b.low),String(b.close),
       b.volume.toFixed(2),(b.volume*b.close).toFixed(2),w.toFixed(2)];
+    if(epOn) rec.push(String(epochIndex(b.time)+1));
     tableCsv.push(rec);
     return '<tr>'+rec.map(c=>'<td>'+c+'</td>').join('')+'</tr>';
   }).join('');
@@ -652,7 +670,7 @@ function chartTitleLine(){
   const preset=(typeof isCyclePreset==='function'&&isCyclePreset($('r').value))
     ?($('r').selectedOptions[0]?$('r').selectedOptions[0].text+' · ':'')
     :'';
-  return `${name} · ${preset}${interval} · ${scale}`+(($('pl')&&$('pl').checked)?' · Power Law':'');
+  return `${name} · ${preset}${interval} · ${scale}`+(($('pl')&&$('pl').checked)?' · Power Law':'')+(typeof epochEnabled==='function'&&epochEnabled()?' · Epoch colors':'');
 }
 function exportFilename(){
   const slug=chartTitleLine().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
@@ -716,6 +734,9 @@ async function composeChartImage(){
     if(sub){ctx.fillStyle='#b86a00';ctx.font=Math.round(11*dpr)+'px Verdana,Arial,sans-serif';ctx.fillText(sub,pad,pad+titleH-Math.round(8*dpr))}
     ctx.drawImage(cv,0,pad+titleH+subH);
     paintWatermark(ctx,0,pad+titleH+subH,width,cv.height,dpr,{loglog:true});
+    if(typeof epochEnabled==='function'&&epochEnabled()&&typeof paintEpochLegend==='function'){
+      paintEpochLegend(ctx,pad+Math.round(72*dpr),pad+titleH+subH+Math.round(10*dpr),dpr);
+    }
     return canvas;
   }
   if(!charts.length) throw new Error('No chart to export');
@@ -788,6 +809,9 @@ async function composeChartImage(){
     y+=p.cv.height;
   }
   paintWatermark(ctx,0,mainY,width,mainH,dpr,{cycles:!!$('cy').checked,volume:!$('cy').checked&&!!$('v').checked});
+  if(typeof epochEnabled==='function'&&epochEnabled()&&typeof paintEpochLegend==='function'&&!($('cy')&&$('cy').checked)){
+    paintEpochLegend(ctx,pad+Math.round(8*dpr),mainY+Math.round(10*dpr),dpr);
+  }
   return canvas;
 }
 async function copyChartImage(e){
@@ -852,6 +876,7 @@ function shareCaption(){
     if($('ch')&&$('ch').checked) marks.push('cycle highs');
     if($('cl')&&$('cl').checked) marks.push('cycle lows');
     if($('hv')&&$('hv').checked) marks.push('halvings');
+    if(typeof epochEnabled==='function'&&epochEnabled()) marks.push('colored by halving epoch');
     if(marks.length) line+=' ('+marks.join(', ')+')';
     bits.push(line);
   }
@@ -942,7 +967,7 @@ document.querySelectorAll('#viewToggle button').forEach(b=>b.onclick=()=>{const 
 $('chartoptions').addEventListener('change',e=>{if(e.target.id==='c'){if($('c').checked)setCustomDefaults();else{$('s').value=$('e').value=''}syncCustom()}
   if(e.target.id==='r'){$('c').checked=false;$('s').value=$('e').value='';syncCustom()}draw(1)});
 $('ca').addEventListener('change',()=>draw(1));
-['ch','cl','hv','pl'].forEach(id=>$(id)&&$(id).addEventListener('change',()=>draw(1)));
+['ch','cl','hv','pl','ep'].forEach(id=>$(id)&&$(id).addEventListener('change',()=>draw(1)));
 $('cp').addEventListener('change',()=>draw(1));
 $('SubmitButton').onclick=()=>draw(1);
 const shift=d=>{if(!$('c').checked){$('c').checked=true;setCustomDefaults();syncCustom()}
