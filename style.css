@@ -162,6 +162,16 @@ body.scout-calyear #scaleToggle,body.scout-calyear #markerBox,body.scout-calyear
 body.scout-calyear #main{height:540px}
 body.scout-calyear #chartWatermark{bottom:52px}
 
+body.scout-onthisday #otdOpts{display:inline-flex}
+body.scout-onthisday #scaleToggle,body.scout-onthisday #markerBox,body.scout-onthisday #ratioBox,body.scout-onthisday #ratioLogBox{display:none}
+body.scout-onthisday #main{height:680px}
+body.scout-onthisday #chartWatermark{left:80px;bottom:72px}
+body.scout-onthisday.has-otd-table #main{height:680px}
+.otd-wrap{padding:8px 12px 12px;border-top:1px solid var(--chart-border,#ccc)}
+.otd-table{margin:0;border-collapse:collapse;font-size:12px}
+.otd-table th,.otd-table td{border:1px solid var(--table-border,#ccc);padding:4px 10px;text-align:right}
+.otd-table th:first-child,.otd-table td:first-child{text-align:left}
+
 a{color:var(--link)}
 select,input[type="text"],input[type="date"],input[type="number"],input#pb{background:var(--input-bg);color:var(--fg);border:1px solid var(--border)}
 #themeToggle{margin-left:8px;background:transparent;color:#ddd;border:1px solid #666;border-radius:4px;padding:3px 10px;cursor:pointer;font:12px Verdana,Arial,sans-serif}
@@ -184,6 +194,7 @@ body.page-classic #blendOpts,
 body.page-classic #priceMaOpts,
 body.page-classic #returnsOpts,
 body.page-classic #yearOpts,
+body.page-classic #otdOpts,
 body.page-classic #scaleToggle [data-scale="loglog"],
 body.page-classic label:has(#da),
 body.page-classic #r optgroup,

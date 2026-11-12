@@ -946,6 +946,7 @@ async function renderScout(kind){
   if(kind==='returns'){await renderReturnsView();return true}
   if(kind==='epoch'){await renderEpochCandlesView();return true}
   if(kind==='calyear'){await renderCalYearView();return true}
+  if(kind==='onthisday'){await renderOnThisDayView();return true}
   return false;
 }
 
@@ -1847,3 +1848,207 @@ async function renderCalYearView(){
 window.renderCalYearView=renderCalYearView;
 window.calYearMode=calYearMode;
 window.formatAxisUsd=formatAxisUsd;
+
+function daysInMonth(year, month){
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+function defaultMonthDay(){
+  const n=new Date();
+  return {m:n.getMonth()+1, d:n.getDate()};
+}
+function parseMonthDay(s){
+  const m=String(s||'').trim().match(/^(\d{1,2})-(\d{1,2})$/);
+  if(!m) return null;
+  const mo=+m[1], d=+m[2];
+  if(mo<1||mo>12||d<1||d>31) return null;
+  return {m:mo,d};
+}
+function readOnThisDay(){
+  const parsed=parseMonthDay($('otd')&&$('otd').value);
+  if(parsed) return parsed;
+  return defaultMonthDay();
+}
+function writeOnThisDay(md, opts){
+  opts=opts||{};
+  const v=String(md.m).padStart(2,'0')+'-'+String(md.d).padStart(2,'0');
+  if($('otd')) $('otd').value=v;
+  if($('otdMonth')) $('otdMonth').value=String(md.m);
+  if($('otdDay')){
+    const max=31;
+    $('otdDay').value=String(Math.min(max,md.d));
+  }
+  return v;
+}
+function syncOnThisDayUi(){
+  const md=readOnThisDay();
+  writeOnThisDay(md);
+  return md;
+}
+function formatUsdLabel(v){
+  if(v==null||!isFinite(v)) return '';
+  if(v>=1000) return '$'+Math.round(v).toLocaleString('en-US');
+  if(v>=1) return '$'+Math.round(v);
+  if(v>=0.01) return '$'+v.toFixed(2);
+  return '$'+v.toPrecision(2);
+}
+function barOnMonthDay(daily, year, month, day){
+  const dim=daysInMonth(year, month);
+  const useDay=Math.min(day, dim);
+  const target=Date.UTC(year, month-1, useDay)/1000;
+  let best=null, bestDt=3*86400;
+  for(const b of daily){
+    const dt=Math.abs(b.time-target);
+    if(dt<=bestDt){best=b;bestDt=dt}
+  }
+  return best;
+}
+function onThisDayRows(daily, month, day){
+  const years=[];
+  for(const b of daily){
+    const y=utcYmd(b.time).y;
+    if(!years.includes(y)) years.push(y);
+  }
+  years.sort((a,b)=>a-b);
+  const rows=[];
+  for(const y of years){
+    if(y<2011) continue;
+    const bar=barOnMonthDay(daily,y,month,day);
+    if(!bar) continue;
+    rows.push({year:y,bar,price:bar.close,date:isoUTC(bar.time)});
+  }
+  return rows;
+}
+function onThisDayReturns(rows){
+  if(!rows.length) return [];
+  const byYear=new Map(rows.map(r=>[r.year,r]));
+  const latest=rows.at(-1);
+  const out=[];
+  for(const n of [4,8,12]){
+    const then=byYear.get(latest.year-n);
+    if(!then||!(then.price>0)||!(latest.price>0)) continue;
+    const roi=latest.price/then.price-1;
+    const cagr=Math.pow(latest.price/then.price,1/n)-1;
+    out.push({years:n, then, now:latest, roi, cagr});
+  }
+  return out;
+}
+function monthDayLabel(m,d){
+  const names=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const short=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return {full:(names[m-1]||'')+' '+d, short:(short[m-1]||'')+' '+String(d).padStart(2,'0')};
+}
+
+async function renderOnThisDayView(){
+  clearCharts();
+  document.body.classList.add('scout-view','scout-onthisday');
+  $('charts').classList.remove('has-volume');
+  const md=syncOnThisDayUi();
+  const daily=await scoutDailyBars();
+  const rows=onThisDayRows(daily, md.m, md.d);
+  if(!rows.length){status('No daily closes for that date.');return}
+  const rets=onThisDayReturns(rows);
+  const showTab=!!($('ott')&&$('ott').checked);
+  document.body.classList.toggle('has-otd-table', showTab);
+  window.lastScout={kind:'onthisday',month:md.m,day:md.d,rows,rets};
+  const lab=monthDayLabel(md.m, md.d);
+  const last=rows.at(-1);
+  status(rows.length+' years on '+lab.full+' · last '+formatUsdLabel(last.price)+' in '+last.year);
+  const main=$('main');
+  main.innerHTML='';
+  $('subs').innerHTML='';
+  setEpochLegend(false);
+
+  attachPaintCanvas(main,(ctx,w,h)=>{
+    const th=T();
+    ctx.fillStyle=th.bg; ctx.fillRect(0,0,w,h);
+    const padL=58, padR=28, padT=14, padB=48;
+    const plotW=w-padL-padR, plotH=h-padT-padB;
+    if(plotW<80||plotH<80) return;
+    const prices=rows.map(r=>r.price);
+    const lo=Math.min(...prices);
+    const pMin=lo>=1?1:Math.max(0.1, lo/2);
+    const pMax=Math.max(...prices)*1.7;
+    const xOf=v=>padL+plotW*((Math.log10(v)-Math.log10(pMin))/(Math.log10(pMax)-Math.log10(pMin)));
+    const n=rows.length;
+    const slot=plotH/n;
+    const barH=Math.max(6, Math.min(26, slot*0.7));
+    // newest at top: row 0 is last year
+    const ordered=rows.slice().reverse();
+    // grid
+    ctx.font='11px Verdana,Arial,sans-serif';
+    ctx.strokeStyle=th.grid; ctx.lineWidth=1;
+    const ticks=[];
+    for(let e=-1;e<=7;e++) ticks.push(Math.pow(10,e));
+    ctx.fillStyle=th.text; ctx.textAlign='center'; ctx.textBaseline='top';
+    for(const t of ticks){
+      if(t<pMin||t>pMax) continue;
+      const x=xOf(t);
+      ctx.beginPath(); ctx.moveTo(x,padT); ctx.lineTo(x,padT+plotH); ctx.strokeStyle=th.grid; ctx.stroke();
+      const lab=t>=1?formatUsdLabel(t):'$'+t;
+      ctx.fillStyle=th.text;
+      ctx.fillText(lab, x, padT+plotH+8);
+    }
+    ctx.strokeStyle=th.border; ctx.strokeRect(padL,padT,plotW,plotH);
+    ctx.fillStyle=th.muted||th.text;
+    ctx.font='10px Verdana,Arial,sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.fillText('Bitcoin price (log scale)', padL+plotW/2, h-4);
+
+    ctx.textAlign='right'; ctx.textBaseline='middle';
+    ctx.font='11px Verdana,Arial,sans-serif';
+    ordered.forEach((r,i)=>{
+      const cy=padT+slot*(i+0.5);
+      const x0=xOf(pMin), x1=xOf(r.price);
+      const y=cy-barH/2;
+      ctx.fillStyle='#f5a623';
+      ctx.fillRect(x0, y, Math.max(2,x1-x0), barH);
+      ctx.strokeStyle='#e09100'; ctx.lineWidth=1;
+      ctx.strokeRect(x0, y, Math.max(2,x1-x0), barH);
+      // year label
+      ctx.fillStyle=th.text;
+      ctx.textAlign='right'; ctx.textBaseline='middle';
+      ctx.font='11px Verdana,Arial,sans-serif';
+      ctx.fillText(String(r.year), padL-8, cy);
+      // price on bar
+      const text=formatUsdLabel(r.price);
+      ctx.font='bold 11px Verdana,Arial,sans-serif';
+      const tw=ctx.measureText(text).width;
+      const inside=(x1-x0)>tw+16;
+      ctx.fillStyle='#111';
+      ctx.textAlign=inside?'right':'left';
+      ctx.fillText(text, inside?x1-6:x1+6, cy);
+    });
+  });
+
+  if(showTab && rets.length){
+    const el=document.createElement('div');
+    el.className='otd-wrap';
+    const fmtPct=v=>{const n=v*100; const s=(Math.abs(n)>=1000?n.toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1}):n.toFixed(1)).replace(/\.0$/,''); return s+'%';}
+    el.innerHTML='<table class="otd-table"><thead><tr><th>Lookback</th><th>Then</th><th>Now</th><th>ROI</th><th>CAGR</th></tr></thead><tbody>'+
+      rets.map(r=>'<tr><td>'+r.years+' years</td><td>'+formatUsdLabel(r.then.price)+' ('+r.then.year+')</td><td>'+formatUsdLabel(r.now.price)+' ('+r.now.year+')</td><td>'+fmtPct(r.roi)+'</td><td>'+fmtPct(r.cagr)+'</td></tr>').join('')+
+      '</tbody></table>';
+    $('subs').appendChild(el);
+  }
+
+  const cnv=window.scoutCanvas;
+  if(cnv){
+    cnv.style.cursor='crosshair';
+    cnv.addEventListener('mousemove',ev=>{
+      const rect=cnv.getBoundingClientRect();
+      const y=ev.clientY-rect.top;
+      const h=rect.height, padT=14, padB=48, plotH=h-padT-padB;
+      const ordered=rows.slice().reverse();
+      const slot=plotH/ordered.length;
+      const i=Math.floor((y-padT)/slot);
+      if(i<0||i>=ordered.length){$('legend').textContent='';return}
+      const r=ordered[i];
+      $('legend').textContent=r.year+'  '+r.date+'  ·  '+formatUsdLabel(r.price);
+    });
+    cnv.addEventListener('mouseleave',()=>{$('legend').textContent=''});
+  }
+}
+window.renderOnThisDayView=renderOnThisDayView;
+window.syncOnThisDayUi=syncOnThisDayUi;
+window.readOnThisDay=readOnThisDay;
+window.writeOnThisDay=writeOnThisDay;
+window.formatUsdLabel=formatUsdLabel;

@@ -2,7 +2,7 @@ const $=id=>document.getElementById(id);
 const LW=LightweightCharts;
 
 const PUBLIC_CHART_BASE='https://chartsbtc.github.io/btccharts/';
-const ADVANCED_HASH_IDS=['cy','ll','pl','vt','rp','rpl','ep','ch','cl','hv','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','da','ca','cp','ym'];
+const ADVANCED_HASH_IDS=['cy','ll','pl','vt','rp','rpl','ep','ch','cl','hv','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','da','ca','cp','ym','otd','ott'];
 function isClassicPage(){return window.CHART_PAGE==='classic'}
 function isAdvancedPage(){return window.CHART_PAGE==='advanced'}
 function hashHasAdvanced(hash){
@@ -74,7 +74,7 @@ function initTheme(){
 }
 
 
-const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','da','cy','ca','cp','ch','cl','hv','ll','pl','ep','rp','rpl','vt','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','ym'];
+const FIELDS=['m','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','da','cy','ca','cp','ch','cl','hv','ll','pl','ep','rp','rpl','vt','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','ym','otd','ott'];
 // populate indicator selects (only implemented ones, original naming)
 document.querySelectorAll('select.ind').forEach(s=>{s.innerHTML='<option value="">None</option>'+Object.entries(INDICATORS).map(([k,v])=>`<option value="${k}">${v.label.replace(/ \(.*/,'')}</option>`).join('')});
 
@@ -107,6 +107,8 @@ function syncViewToggle(){
   document.body.classList.toggle('scout-returns',vt==='returns' && !on);
   document.body.classList.toggle('scout-epoch',vt==='epoch' && !on);
   document.body.classList.toggle('scout-calyear',vt==='calyear' && !on);
+  document.body.classList.toggle('scout-onthisday',vt==='onthisday' && !on);
+  if(vt==='onthisday' && typeof syncOnThisDayUi==='function') syncOnThisDayUi();
   document.body.classList.toggle('mode-mult',vt==='returns' && ($('rm')&&$('rm').value==='mult') && !on);
   document.querySelectorAll('#viewToggle button').forEach(b=>b.classList.toggle('on',(b.dataset.cy==='1')===on && !vt));
   if(!vt && !on) document.querySelectorAll('#viewToggle button').forEach(b=>b.classList.toggle('on',(b.dataset.cy==='1')===false));
@@ -114,6 +116,7 @@ function syncViewToggle(){
   const pmo=$('priceMaOpts'); if(pmo) pmo.hidden=!(vt==='pricema' && !on);
   const ro=$('returnsOpts'); if(ro) ro.hidden=!(vt==='returns' && !on);
   const yo=$('yearOpts'); if(yo) yo.hidden=!(vt==='calyear' && !on);
+  const oo=$('otdOpts'); if(oo) oo.hidden=!(vt==='onthisday' && !on);
   const showPct=!on && (vt==='powerlaw' || (vt==='pricema' && !($('pmm')&&$('pmm').value==='osc')) || (!vt && typeof ratioKind==='function' && ratioKind()));
   document.body.classList.toggle('has-pct-bands', showPct);
   const pbo=$('pctBandOpts'); if(pbo) pbo.hidden=!showPct;
@@ -367,7 +370,7 @@ function drawPowerLawUplot(u,xs,barAt){
 }
 
 let plSeries={};
-function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if(typeof clearScoutPlots==='function')clearScoutPlots();if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view','scout-view','scout-powerlaw','scout-drawdown','scout-ath','scout-sats','scout-pricema','scout-osc','scout-returns','mode-mult','scout-blend','scout-epoch','scout-calyear');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null;if($('plLegend')&&!($('pl')&&$('pl').checked)){$('plLegend').hidden=true;$('plLegend').textContent=''}}
+function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if(typeof clearScoutPlots==='function')clearScoutPlots();if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view','scout-view','scout-powerlaw','scout-drawdown','scout-ath','scout-sats','scout-pricema','scout-osc','scout-returns','mode-mult','scout-blend','scout-epoch','scout-calyear','scout-onthisday','has-otd-table');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null;if($('plLegend')&&!($('pl')&&$('pl').checked)){$('plLegend').hidden=true;$('plLegend').textContent=''}}
 
 async function draw(pushUrl){
   const hash=buildHash();
@@ -760,7 +763,7 @@ function clear_table(){
   if($('loadRaw')) $('loadRaw').textContent='Show data';
 }
 function showTable(){
-  if($('cy').checked) fillCycleTable(); else if(typeof scoutView==='function'&&scoutView()==='powerlaw') fillPowerLawTable(); else if(scoutView()==='drawdown') fillDrawdownTable(); else if(scoutView()==='ath') fillAthTable(); else if(scoutView()==='sats') fillSatsTable(); else if(scoutView()==='pricema') fillPriceMaTable(); else if(scoutView()==='returns') fillReturnsTable(); else if(scoutView()==='epoch') fillEpochTable(); else if(scoutView()==='calyear') fillCalYearTable(); else fillPriceTable();
+  if($('cy').checked) fillCycleTable(); else if(typeof scoutView==='function'&&scoutView()==='powerlaw') fillPowerLawTable(); else if(scoutView()==='drawdown') fillDrawdownTable(); else if(scoutView()==='ath') fillAthTable(); else if(scoutView()==='sats') fillSatsTable(); else if(scoutView()==='pricema') fillPriceMaTable(); else if(scoutView()==='returns') fillReturnsTable(); else if(scoutView()==='epoch') fillEpochTable(); else if(scoutView()==='calyear') fillCalYearTable(); else if(scoutView()==='onthisday') fillOnThisDayTable(); else fillPriceTable();
   tableOpen=true;
   $('tableWrap').hidden=false;
   $('downloadCsv').hidden=false;
@@ -809,6 +812,25 @@ function fillCycleTable(){
     }
   }
   $('chart_table').tBodies[0].innerHTML=parts.join('');
+}
+function fillOnThisDayTable(){
+  const s=window.lastScout||{}, rows=s.rows||[], rets=s.rets||[];
+  const head=['Year','Date','Close'];
+  setTableHead(head); tableCsv=[head.slice()];
+  const body=[];
+  for(const r of rows.slice().reverse()){
+    const rec=[String(r.year), r.date, String(+r.price.toFixed(2))];
+    tableCsv.push(rec);
+    body.push('<tr>'+rec.map(v=>'<td>'+v+'</td>').join('')+'</tr>');
+  }
+  if(rets.length){
+    tableCsv.push([]);
+    tableCsv.push(['Lookback','Then','Now','ROI %','CAGR %']);
+    for(const r of rets){
+      tableCsv.push([String(r.years)+' years', String(+r.then.price.toFixed(2))+' ('+r.then.year+')', String(+r.now.price.toFixed(2))+' ('+r.now.year+')', (r.roi*100).toFixed(2), (r.cagr*100).toFixed(2)]);
+    }
+  }
+  $('chart_table').tBodies[0].innerHTML=body.join('');
 }
 function fillCalYearTable(){
   const s=window.lastScout||{};
@@ -954,9 +976,14 @@ function isMobileUa(){
 }
 function chartTitleLine(){
   const vt=($('vt')&&$('vt').value)||'';
-  if(vt==='powerlaw'||vt==='drawdown'||vt==='ath'||vt==='sats'||vt==='pricema'||vt==='returns'||vt==='epoch'||vt==='calyear'){
+  if(vt==='powerlaw'||vt==='drawdown'||vt==='ath'||vt==='sats'||vt==='pricema'||vt==='returns'||vt==='epoch'||vt==='calyear'||vt==='onthisday'){
     const m=currentMarket();
     const name=m==='combinedUSD'?'BTC/USD Combined':('BTC/USD '+marketLabel(m).replace(/ \(USD\)/,''));
+    if(vt==='onthisday'){
+      const md=typeof readOnThisDay==='function'?readOnThisDay():{m:0,d:0};
+      const lab=md&&md.m?(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][md.m-1]+' '+String(md.d).padStart(2,'0')):'this day';
+      return name+' · Price on '+lab;
+    }
     if(vt==='calyear'){
       const idx=($('ym')&&$('ym').value)==='idx';
       return name+' · '+(idx?'Annual performance (indexed to Jan 1)':'Price history by year');
@@ -1261,6 +1288,18 @@ function shareCaption(){
     if(bars.length) bits.push('Last $'+Number(bars.at(-1).close).toLocaleString('en-US',{maximumFractionDigits:0})+' on '+isoUTC(bars.at(-1).time));
     return bits.join('. ')+'.';
   }
+  if(vt==='onthisday'){
+    const s=window.lastScout||{};
+    const lab=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][(s.month||1)-1]+' '+String(s.day||'').padStart(2,'0');
+    bits.push('Bitcoin closing price on '+lab+' each year');
+    const last=s.rows&&s.rows.at(-1);
+    if(last) bits.push(last.year+' '+formatUsdLabel(last.price));
+    const rets=s.rets||[];
+    for(const r of rets){
+      bits.push(r.years+'-year ROI '+((r.roi*100).toFixed(0))+'%, CAGR '+((r.cagr*100).toFixed(1))+'%');
+    }
+    return bits.join('. ')+'.';
+  }
   if(vt==='calyear'){
     const s=window.lastScout||{};
     const idx=s.mode==='idx';
@@ -1399,7 +1438,11 @@ document.querySelectorAll('#viewToggle button').forEach(b=>b.onclick=()=>{const 
   if($('cy').checked===want && !want){draw(1);return}
   $('cy').checked=want;if(want)$('p').checked=false;draw(1)});
 $('vt')&&$('vt').addEventListener('change',()=>{if($('vt').value)$('cy').checked=false;draw(1)});
-['pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','ym'].forEach(id=>$(id)&&$(id).addEventListener('change',()=>draw(1)));
+['pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','ym','ott'].forEach(id=>$(id)&&$(id).addEventListener('change',()=>draw(1)));
+['otdMonth','otdDay'].forEach(id=>$(id)&&$(id).addEventListener('change',()=>{
+  if(typeof writeOnThisDay==='function') writeOnThisDay({m:parseInt($('otdMonth').value,10),d:parseInt($('otdDay').value,10)});
+  draw(1);
+}));
 $('blw')&&$('blw').addEventListener('input',()=>{if($('blwVal'))$('blwVal').textContent=$('blw').value});
 $('chartoptions').addEventListener('change',e=>{if(e.target.id==='c'){if($('c').checked)setCustomDefaults();else{$('s').value=$('e').value=''}syncCustom()}
   if(e.target.id==='r'){$('c').checked=false;$('s').value=$('e').value='';syncCustom()}draw(1)});

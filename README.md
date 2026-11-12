@@ -28,3 +28,4 @@ Static bitcoincharts.com-style chart page, split into two views that share the s
 - Dual axis (`da`): log scale on the left and linear scale on the right, on the same price chart.
 - Dark mode: a header toggle themes the page and every chart (Lightweight Charts and uPlot). The choice is saved in localStorage, defaults to the system `prefers-color-scheme`, and can be forced with the \`dk\` hash key so permalinks, Copy image, Download PNG, and Post image all render in the active theme.
 - Calendar year overlay (`vtgcalyear`): one line per year on a Jan–Dec axis, with the current year emphasized. Raw USD uses a linear scale (2017 onward). Indexed mode (`ymgidx`) rebases every year to the current year’s January 1 close and plots on a log scale (2020 onward).
+- On this day (`vtgonthisday`): horizontal log-scale bars of the daily close on a chosen month/day (default today) for each year since 2011. Optional 4/8/12-year ROI and CAGR table (`ott`). Hash: `otd` (MM-DD).
