@@ -107,6 +107,24 @@
       <option value="ranges">Days in price ranges</option>
     </select>
   </label>
+  <label id="scoutPresetBox" class="advanced-only">Chart Scout
+    <select id="sp">
+      <option value="" selected>None</option>
+      <option value="spxgold">S&amp;P 500 vs Gold</option>
+    </select>
+  </label>
+  <span id="ratioOpts" class="scout-opts">
+    <label>Ratio MA <select id="rma">
+      <option value="" selected>None</option>
+      <option value="1y">1 year</option>
+      <option value="5y">5 years</option>
+      <option value="10y">10 years</option>
+      <option value="20y">20 years</option>
+    </select></label>
+    <label><input type="checkbox" id="rme">Long-run mean</label>
+    <label><input type="checkbox" id="el">End labels</label>
+    <label><input type="checkbox" id="ss">Shared scale</label>
+  </span>
   <span id="priceMaOpts" class="scout-opts" hidden>
     <label>MA <select id="pma">
       <option value="200d" selected>200-day</option>

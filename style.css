@@ -238,3 +238,11 @@ body.compare-on label:has(#da),
 body.compare-on label:has(#p),
 body.compare-on #scaleToggle [data-scale="loglog"],
 body.compare-on #ratioBox{display:none !important}
+
+body.has-ratio-opts #ratioOpts{display:inline-flex}
+#scoutPresetBox{font-weight:bold;margin-right:8px}
+#scoutPresetBox select{font-size:12px;max-width:180px}
+body.page-classic #scoutPresetBox,
+body.page-classic #ratioOpts{display:none !important}
+body.scout-view #scoutPresetBox,body.cycles-view #scoutPresetBox{display:inline}
+.chart-overlay{position:absolute;left:0;top:0;right:0;bottom:0;pointer-events:none;z-index:4}

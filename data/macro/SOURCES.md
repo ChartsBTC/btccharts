@@ -16,12 +16,14 @@ same convention as `combinedUSD.json`). CPI months are dated the 1st of the
 month, UTC midnight (FRED convention). Pre-1970 dates (S&P 500, CPI) use
 negative Unix timestamps; they are valid JSON numbers and valid JS Date values.
 
-Market-style ids (planned dropdown entries, not wired in the UI yet):
+Market-style ids (wired into the Advanced market / Compare to dropdowns):
 
 | id | file | series |
 | --- | --- | --- |
 | `goldUSD` | `goldUSD.json` | Gold USD, COMEX continuous futures proxy |
-| `spx` | `spx.json` | S&P 500 price index |
+| `goldLBMA` | `goldLBMA.json` | Gold USD, DataHub monthly (World Bank / Timothy Green) |
+| `spx` | `spx.json` | S&P 500 price index (Yahoo daily) |
+| `spxShiller` | `spxShiller.json` | S&P 500 monthly, Shiller / DataHub (FRED after mid-2023) |
 | `spxTR` | `spxTR.json` | S&P 500 total return |
 | `aapl` `msft` `googl` `amzn` `nvda` `meta` `tsla` | same-name `.json` | Mag 7, split+dividend adjusted |
 | (companions) | `aapl_raw.json` etc. | Mag 7, split-unadjusted OHLC |
@@ -192,6 +194,55 @@ files are left in place.
   data product. Re-run `fetch_macro.py` rather than treating the snapshots as
   authoritative.
 
+
+## goldLBMA — DataHub monthly gold (long history)
+
+[DataHub core/gold-prices](https://datahub.io/core/gold-prices/) monthly CSV,
+also mirrored at [datasets/gold-prices](https://github.com/datasets/gold-prices).
+License: **Open Data Commons Public Domain Dedication and License (ODC-PDDL-1.0)**.
+The World Bank Pink Sheet data is freely available; Timothy Green's historical
+records similarly carry no known restrictions. Credit DataHub and the underlying
+compilers.
+
+- **2,326** monthly rows, **1833-01-01** through **2026-10-01**, dated the 1st
+  of the month, UTC midnight. Each row is `[t, v, v, v, v, 0]`.
+- **1833–1959:** Timothy Green annual average gold price, repeated for every
+  month of the year (no true monthly readings exist for that period).
+- **1960–present:** World Bank Commodity Markets ("Pink Sheet") monthly prices
+  in USD per troy ounce (London market). This is the series DataHub currently
+  publishes; it is not a tick-for-tick LBMA official fix, though Jim's
+  reference chart credits "LBMA / DataHub.io".
+- Spot checks: 1970-01 = 35.00; 1980-01 = 675.00; 2000-08 = 274.47;
+  2026-09 = 4,319.00 (matches the reference chart); 2026-10 = 4,105.00.
+- This is a different series from `goldUSD` (COMEX `GC=F` daily from 2000-08-30).
+  The two should not be mixed without a documented splice. The S&P 500 vs Gold
+  Chart Scout preset uses `goldLBMA` throughout so the history reaches 1970 and
+  the end-point matches the DataHub monthly print (Sep 2026 gold $4,319).
+
+Refresh: `python3 fetch_macro.py --only goldLBMA` (no signup).
+
+## spxShiller — Shiller / DataHub monthly S&P 500
+
+[DataHub core/s-and-p-500](https://datahub.io/core/s-and-p-500/), tidied from
+[Robert Shiller's dataset](http://www.econ.yale.edu/~shiller/data.htm), with
+months after mid-2023 extended from FRED `SP500` (price only; other Shiller
+fields are 0). License: the DataHub maintainer dedicates the tidy CSV under
+**ODC-PDDL-1.0** and asks that Shiller be credited. The original Shiller file
+has no exact license statement; treat it as factual public data and credit him.
+
+- **1,869** monthly rows, **1871-01-01** through **2026-09-01**.
+- Close-only: `[t, v, v, v, v, 0]`, 1st of the month, UTC midnight.
+- Spot checks: 1970-01 = 90.31; 2026-09 = 7,669.41 (matches the reference
+  chart's "S&P 500: 7,669").
+- This is a monthly average (Shiller) / monthly FRED extension, not the same
+  as `spx` (Yahoo `^GSPC` daily closes). The Chart Scout S&P vs Gold preset
+  uses `spxShiller` so the 1970–now window and end labels line up with the
+  DataHub gold monthly series. Overlap of the two monthly files from 1970-01
+  through 2026-09 is 681 months; Sep 2026 ratio is 7,669.41 / 4,319 = 1.78,
+  and the long-run mean of that window is 1.63.
+
+Refresh: `python3 fetch_macro.py --only spxShiller`.
+
 ## Last refresh coverage
 
 Refresh date: 2026-11-12, early morning America/Los_Angeles. US equities and
@@ -208,7 +259,9 @@ chunks, 10–30 minute 429 backoff, and a pause between symbols.
 | id | start | end | rows | bytes |
 | --- | --- | --- | ---: | ---: |
 | `goldUSD` | 2000-08-30 | 2026-11-12 | 6,577 | 524,852 |
+| `goldLBMA` | 1833-01-01 | 2026-10-01 | 2,326 | 96,192 |
 | `spx` | 1927-12-30 | 2026-11-11 | 24,834 | 2,315,715 |
+| `spxShiller` | 1871-01-01 | 2026-09-01 | 1,869 | 78,399 |
 | `spxTR` | 1988-01-04 | 2026-11-11 | 9,789 | 823,688 |
 | `aapl` | 1980-12-12 | 2026-11-11 | 11,572 | 1,162,723 |
 | `aapl_raw` | 1980-12-12 | 2026-11-11 | 11,572 | 1,075,754 |

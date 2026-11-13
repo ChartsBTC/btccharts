@@ -16,6 +16,11 @@ Sources (all free, no signup):
               FRED's CPIAUCSL)
   cpiAUCNS  – BLS Public Data API CUUR0000SA0 (CPI-U not seasonally adjusted;
               FRED's CPIAUCNS)
+  goldLBMA  – DataHub.io core/gold-prices monthly USD/oz (ODC-PDDL-1.0).
+              1833–1959 Timothy Green annual averages repeated each month;
+              1960–present World Bank Commodity Markets (Pink Sheet, London).
+  spxShiller– DataHub.io core/s-and-p-500 monthly (ODC-PDDL-1.0), Robert
+              Shiller's dataset through mid-2023, then FRED SP500 prices.
 
 Output format matches existing market caches: compact JSON lists of
   [unix_utc_midnight, open, high, low, close, volume]
@@ -554,10 +559,73 @@ def _load(name):
         return json.load(f)
 
 
+
+DATAHUB_UA = {
+    "User-Agent": "btccharts-clone/1.3 (research cache; https://chartsbtc.github.io/btccharts/)",
+    "Accept": "text/csv,application/json,*/*",
+}
+DATAHUB_GOLD = "https://datahub.io/core/gold-prices/_r/-/data/monthly.csv"
+DATAHUB_SPX = "https://datahub.io/core/s-and-p-500/_r/-/data/data.csv"
+
+
+def http_text(url: str, headers: dict, tries: int = 5, timeout: int = 60) -> str:
+    last = None
+    for i in range(tries):
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return resp.read().decode("utf-8")
+        except Exception as e:
+            last = e
+            time.sleep(2 * (i + 1))
+    raise last
+
+
+def _month_ts(s: str) -> int:
+    s = s.strip()
+    parts = s.split("-")
+    y, m = int(parts[0]), int(parts[1])
+    return int(dt.datetime(y, m, 1, tzinfo=UTC).timestamp())
+
+
+def fetch_datahub(only: set[str] | None = None) -> None:
+    want = {n for n in ("goldLBMA", "spxShiller") if only is None or n in only}
+    if "goldLBMA" in want:
+        text = http_text(DATAHUB_GOLD, DATAHUB_UA)
+        rows = []
+        import csv
+        from io import StringIO
+        for r in csv.DictReader(StringIO(text)):
+            try:
+                c = float(r["Price"])
+            except (KeyError, ValueError):
+                continue
+            if c <= 0:
+                continue
+            t = _month_ts(r["Date"])
+            rows.append([t, c, c, c, c, 0.0])
+        write_market("goldLBMA", rows)
+    if "spxShiller" in want:
+        text = http_text(DATAHUB_SPX, DATAHUB_UA)
+        rows = []
+        import csv
+        from io import StringIO
+        for r in csv.DictReader(StringIO(text)):
+            try:
+                c = float(r["SP500"])
+            except (KeyError, ValueError):
+                continue
+            if c <= 0:
+                continue
+            t = _month_ts(r["Date"])
+            rows.append([t, c, c, c, c, 0.0])
+        write_market("spxShiller", rows)
+
 def report_sanity():
     print("\n=== coverage ===")
     ids = [n for n, *_ in YAHOO_SERIES] + [f"{n}_raw" for n, _, raw, *_ in YAHOO_SERIES if raw]
     ids += [n for n, *_ in BLS_SERIES]
+    ids += ["goldLBMA", "spxShiller"]
     for name in ids:
         rows = _load(name)
         path = os.path.join(DATA, f"{name}.json")
@@ -623,6 +691,7 @@ def main():
     ap.add_argument("--only", nargs="+", help="Limit to these series ids (e.g. aapl cpiAUCSL)")
     ap.add_argument("--skip-yahoo", action="store_true")
     ap.add_argument("--skip-bls", action="store_true")
+    ap.add_argument("--skip-datahub", action="store_true")
     ap.add_argument("--pause", type=float, default=20.0,
                     help="Seconds to sleep between Yahoo symbols (default 20)")
     ap.add_argument("--chunk-years", type=int, default=YAHOO_CHUNK_YEARS,
@@ -639,6 +708,10 @@ def main():
         need_yahoo = True if only is None else any(n in only for n, *_ in YAHOO_SERIES)
         if need_yahoo:
             fetch_yahoo(pause=args.pause, only=only)
+    if not args.skip_datahub:
+        need_dh = True if only is None else any(n in only for n in ("goldLBMA", "spxShiller"))
+        if need_dh:
+            fetch_datahub(only=only)
     report_sanity()
 
 

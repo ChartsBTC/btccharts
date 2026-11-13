@@ -7,7 +7,9 @@ const MARKETS={
   bitstampUSD:{label:'Bitstamp (USD)',live:'bitstamp',short:'Bitstamp'},
   mtgoxUSD:{label:'Mt. Gox (USD)',live:null,short:'Mt. Gox'},
   goldUSD:{label:'Gold (USD)',live:null,kind:'macro',short:'Gold',unit:'USD'},
+  goldLBMA:{label:'Gold (DataHub monthly)',live:null,kind:'macro',short:'Gold',unit:'USD'},
   spx:{label:'S&P 500',live:null,kind:'macro',short:'S&P 500'},
+  spxShiller:{label:'S&P 500 (Shiller monthly)',live:null,kind:'macro',short:'S&P 500'},
   spxTR:{label:'S&P 500 total return',live:null,kind:'macro',short:'S&P 500 TR'},
   aapl:{label:'Apple (AAPL)',live:null,kind:'macro',short:'AAPL',unit:'USD'},
   msft:{label:'Microsoft (MSFT)',live:null,kind:'macro',short:'MSFT',unit:'USD'},
@@ -18,7 +20,7 @@ const MARKETS={
   tsla:{label:'Tesla (TSLA)',live:null,kind:'macro',short:'TSLA',unit:'USD'},
   cpiAUCSL:{label:'CPI-U (SA)',live:null,kind:'macro',short:'CPI'},
 };
-const MACRO_IDS=['goldUSD','spx','spxTR','aapl','msft','googl','amzn','nvda','meta','tsla','cpiAUCSL'];
+const MACRO_IDS=['goldUSD','goldLBMA','spx','spxShiller','spxTR','aapl','msft','googl','amzn','nvda','meta','tsla','cpiAUCSL'];
 const BTC_IDS=['combinedUSD','coinbaseUSD','bitstampUSD','mtgoxUSD'];
 function isMacroMarket(m){return !!(MARKETS[m]&&MARKETS[m].kind==='macro')}
 function isBtcMarket(m){return !!(MARKETS[m]&&MARKETS[m].kind!=='macro')}
@@ -57,26 +59,23 @@ function locfAlignCloses(srcRows, times, opts){
   }
   return out;
 }
+function ensureOpt(select, group, id, label){
+  if(!select||select.querySelector('option[value="'+id+'"]')) return;
+  let g=null;
+  if(group){
+    g=[...select.querySelectorAll('optgroup')].find(x=>x.label===group);
+    if(!g){g=document.createElement('optgroup'); g.label=group; select.appendChild(g)}
+  }
+  const o=document.createElement('option'); o.value=id; o.textContent=label;
+  (g||select).appendChild(o);
+}
 function populateMarketSelects(){
   const m=document.getElementById('m');
-  if(m&&!m.querySelector('option[value="goldUSD"]')){
-    const g=document.createElement('optgroup'); g.label='Macro';
-    for(const id of MACRO_IDS){
-      const o=document.createElement('option'); o.value=id; o.textContent=MARKETS[id].label; g.appendChild(o);
-    }
-    m.appendChild(g);
-  }
+  if(m) for(const id of MACRO_IDS) ensureOpt(m,'Macro',id,MARKETS[id].label);
   const cm=document.getElementById('cm');
-  if(cm&&!cm.querySelector('option[value="combinedUSD"]')){
-    const add=(label,ids)=>{
-      const g=document.createElement('optgroup'); g.label=label;
-      for(const id of ids){
-        const o=document.createElement('option'); o.value=id; o.textContent=MARKETS[id].label; g.appendChild(o);
-      }
-      cm.appendChild(g);
-    };
-    add('Bitcoin',BTC_IDS);
-    add('Macro',MACRO_IDS);
+  if(cm){
+    for(const id of BTC_IDS) ensureOpt(cm,'Bitcoin',id,MARKETS[id].label);
+    for(const id of MACRO_IDS) ensureOpt(cm,'Macro',id,MARKETS[id].label);
   }
 }
 // Combined splice (UTC): Mt. Gox through 2013-12-31, Bitstamp 2014-01-01–2016-12-31, Coinbase from 2017-01-01.

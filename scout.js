@@ -184,6 +184,7 @@ function percentiles(values, ps){
 const DEFAULT_PCT_LIST='1, 5, 20, 50, 80, 95, 99';
 function parsePctList(s){
   const raw=s!=null?s:(($('pb')&&$('pb').value)||DEFAULT_PCT_LIST);
+  if(/^(off|none|false)$/i.test(String(raw).trim())) return [];
   const out=[];
   for(const part of String(raw).split(/[,\s]+/)){
     if(!part) continue;
@@ -191,6 +192,30 @@ function parsePctList(s){
     if(isFinite(n)&&n>=0&&n<=100) out.push(+n);
   }
   return [...new Set(out)].sort((a,b)=>a-b);
+}
+function ratioMaSeconds(spec){
+  const m=String(spec||(($('rma')&&$('rma').value)||'')).trim().toLowerCase();
+  const n=parseFloat(m);
+  if(!isFinite(n)||n<=0) return 0;
+  if(m.endsWith('y')) return n*365.25*86400;
+  if(m.endsWith('m')) return n*(365.25/12)*86400;
+  if(m.endsWith('w')) return n*7*86400;
+  if(m.endsWith('d')) return n*86400;
+  return n*86400;
+}
+function trailingTimeMA(points, seconds){
+  if(!points||!points.length||!(seconds>0)) return [];
+  const out=[];
+  let i0=0;
+  for(let i=0;i<points.length;i++){
+    const t=points[i].time;
+    while(i0<i && points[i0].time<t-seconds) i0++;
+    if(t-(points[i0]&&points[i0].time||t)<seconds*0.85) continue;
+    let s=0,n=0;
+    for(let j=i0;j<=i;j++){ const v=points[j].value; if(v>0){s+=v;n++} }
+    if(n) out.push({time:t,value:s/n});
+  }
+  return out;
 }
 function percentileRank(values, v){
   const a=values.filter(x=>x!=null&&isFinite(x)).slice().sort((x,y)=>x-y);
@@ -409,8 +434,7 @@ function formatRatioValue(v){
   if(v==null||!isFinite(v)) return '';
   const a=Math.abs(v);
   if(a>=1000) return v.toLocaleString('en-US',{maximumFractionDigits:1});
-  if(a>=10) return v.toFixed(2);
-  if(a>=1) return v.toFixed(3);
+  if(a>=1) return v.toFixed(2);
   if(a>=0.01) return v.toFixed(4);
   if(a>=0.0001) return v.toFixed(6);
   return v.toExponential(2);
@@ -433,7 +457,8 @@ function addRatioPanel(computed, opts){
   if(!computed||!computed.points||computed.points.length<2) return null;
   const host=opts.host||$('subs');
   const el=document.createElement('div');
-  el.className='sub scout-ratio'+(opts.big?' big':'');
+  const fat=opts.big||(($('rma')&&$('rma').value)||($('rme')&&$('rme').checked));
+  el.className='sub scout-ratio'+(fat?' big':'');
   el.innerHTML='<span class="lbl">'+computed.title+'</span>';
   if(opts.prepend&&host.firstChild) host.insertBefore(el,host.firstChild);
   else host.appendChild(el);
@@ -443,17 +468,47 @@ function addRatioPanel(computed, opts){
   attachRatioPercentiles(computed);
   const lastV=computed.last&&computed.last.value;
   const prec=lastV!=null&&Math.abs(lastV)<0.01?6:lastV!=null&&Math.abs(lastV)<1?4:3;
+  const cols=(typeof compareLineColors==='function'&&computed.kind==='compare')?compareLineColors(currentMarket(),currentCompare()):null;
+  const hideEnd=$('el')&&$('el').checked;
   const ls=ch.addLineSeries({
-    color:opts.color||'#1565c0',
-    lineWidth:1.5,
+    color:opts.color||(cols&&cols.ratio)||'#1565c0',
+    lineWidth:2,
     priceLineVisible:false,
-    lastValueVisible:true,
+    lastValueVisible:!hideEnd,
     priceFormat:{type:'price',precision:prec,minMove:Math.pow(10,-prec)},
   });
   ls.setData(computed.points.map(p=>({time:p.time,value:p.value})));
-  ls.createPriceLine({price:1,color:'#e53935',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'1.0'});
-  addRatioPctLines(ls, computed);
-  const bandVals=(computed.pctLevels||[]).map(lv=>lv.value).filter(v=>v!=null&&isFinite(v)&&v>0);
+  if(!($('rme')&&$('rme').checked)){
+    ls.createPriceLine({price:1,color:'#e53935',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'1.0'});
+  }
+  const maSec=ratioMaSeconds();
+  if(maSec>0){
+    const ma=trailingTimeMA(computed.points, maSec);
+    if(ma.length>1){
+      const maSpec=($('rma')&&$('rma').value)||'';
+      const ms=ch.addLineSeries({
+        color:(cols&&cols.ma)||'#616161',
+        lineWidth:2,lineStyle:2,
+        priceLineVisible:false,lastValueVisible:false,
+        title:(maSpec.replace('y','-year')||'MA')+' MA',
+        priceFormat:{type:'price',precision:prec,minMove:Math.pow(10,-prec)},
+      });
+      ms.setData(ma);
+      computed.ma=ma;
+      computed.maLast=ma.at(-1);
+    }
+  }
+  if($('rme')&&$('rme').checked){
+    const vals=computed.points.map(p=>p.value).filter(v=>v>0&&isFinite(v));
+    if(vals.length){
+      const mean=vals.reduce((a,b)=>a+b,0)/vals.length;
+      computed.mean=mean;
+      ls.createPriceLine({price:mean,color:(cols&&cols.mean)||'#9e9e9e',lineWidth:1,lineStyle:3,axisLabelVisible:true,title:'Mean ('+formatRatioValue(mean)+')'});
+    }
+  }
+  const pctOn=parsePctList().length>0;
+  if(pctOn) addRatioPctLines(ls, computed);
+  const bandVals=pctOn?(computed.pctLevels||[]).map(lv=>lv.value).filter(v=>v!=null&&isFinite(v)&&v>0):[];
   if(bandVals.length){
     const t0=computed.points[0].time, t1=computed.points.at(-1).time;
     const ghost=ch.addLineSeries({color:'rgba(0,0,0,0)',lineVisible:false,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});
@@ -464,6 +519,37 @@ function addRatioPanel(computed, opts){
     scaleMargins:{top:.08,bottom:.08},
     minimumWidth:80,
   });
+  if($('el')&&$('el').checked&&computed.last&&typeof attachChartOverlay==='function'){
+    const label='Current: '+formatRatioValue(computed.last.value);
+    const when=(()=>{const d=new Date(computed.last.time*1000);return d.toLocaleString('en-US',{month:'short',year:'numeric',timeZone:'UTC'})})();
+    attachChartOverlay(ch,(ctx,chart,w,h)=>{
+      const x=chart.timeScale().timeToCoordinate(computed.last.time);
+      const y=ls.priceToCoordinate(computed.last.value);
+      if(x==null||y==null) return;
+      ctx.save();
+      ctx.font='bold 12px Verdana,Arial,sans-serif';
+      ctx.textBaseline='bottom';
+      const tw=Math.max(ctx.measureText(label).width, ctx.measureText(when).width);
+      const px=Math.min(w-tw-10, Math.max(8,x-tw-8));
+      const py=y-6;
+      const stroke=(typeof isDark==='function'&&isDark())?'rgba(0,0,0,0.75)':'rgba(255,255,255,0.9)';
+      ctx.lineWidth=3; ctx.strokeStyle=stroke;
+      ctx.fillStyle=(cols&&cols.ratio)||'#1565c0';
+      ctx.strokeText(label,px,py-12);
+      ctx.fillText(label,px,py-12);
+      ctx.strokeText(when,px,py);
+      ctx.fillText(when,px,py);
+      ctx.beginPath();
+      ctx.strokeStyle=(cols&&cols.ratio)||'#1565c0';
+      ctx.lineWidth=1.2;
+      ctx.moveTo(px+tw+2, py-8);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      ctx.fillStyle=(cols&&cols.ratio)||'#1565c0';
+      ctx.beginPath(); ctx.arc(x,y,3.5,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    });
+  }
   return {chart:ch,computed};
 }
 
