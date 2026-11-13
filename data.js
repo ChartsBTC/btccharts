@@ -2,11 +2,83 @@
 const CB='https://api.exchange.coinbase.com/products/BTC-USD/candles';
 const BS='https://www.bitstamp.net/api/v2/ohlc/btcusd/';
 const MARKETS={
-  combinedUSD:{label:'Combined history',live:'coinbase'},
-  coinbaseUSD:{label:'Coinbase (USD)',live:'coinbase'},
-  bitstampUSD:{label:'Bitstamp (USD)',live:'bitstamp'},
-  mtgoxUSD:{label:'Mt. Gox (USD)',live:null},
+  combinedUSD:{label:'Combined history',live:'coinbase',short:'BTC'},
+  coinbaseUSD:{label:'Coinbase (USD)',live:'coinbase',short:'Coinbase'},
+  bitstampUSD:{label:'Bitstamp (USD)',live:'bitstamp',short:'Bitstamp'},
+  mtgoxUSD:{label:'Mt. Gox (USD)',live:null,short:'Mt. Gox'},
+  goldUSD:{label:'Gold (USD)',live:null,kind:'macro',short:'Gold',unit:'USD'},
+  spx:{label:'S&P 500',live:null,kind:'macro',short:'S&P 500'},
+  spxTR:{label:'S&P 500 total return',live:null,kind:'macro',short:'S&P 500 TR'},
+  aapl:{label:'Apple (AAPL)',live:null,kind:'macro',short:'AAPL',unit:'USD'},
+  msft:{label:'Microsoft (MSFT)',live:null,kind:'macro',short:'MSFT',unit:'USD'},
+  googl:{label:'Alphabet (GOOGL)',live:null,kind:'macro',short:'GOOGL',unit:'USD'},
+  amzn:{label:'Amazon (AMZN)',live:null,kind:'macro',short:'AMZN',unit:'USD'},
+  nvda:{label:'NVIDIA (NVDA)',live:null,kind:'macro',short:'NVDA',unit:'USD'},
+  meta:{label:'Meta (META)',live:null,kind:'macro',short:'META',unit:'USD'},
+  tsla:{label:'Tesla (TSLA)',live:null,kind:'macro',short:'TSLA',unit:'USD'},
+  cpiAUCSL:{label:'CPI-U (SA)',live:null,kind:'macro',short:'CPI'},
 };
+const MACRO_IDS=['goldUSD','spx','spxTR','aapl','msft','googl','amzn','nvda','meta','tsla','cpiAUCSL'];
+const BTC_IDS=['combinedUSD','coinbaseUSD','bitstampUSD','mtgoxUSD'];
+function isMacroMarket(m){return !!(MARKETS[m]&&MARKETS[m].kind==='macro')}
+function isBtcMarket(m){return !!(MARKETS[m]&&MARKETS[m].kind!=='macro')}
+function shortMarketLabel(m){return (MARKETS[m]&&MARKETS[m].short)||marketLabel(m)}
+function currentCompare(){const cm=document.getElementById('cm')?.value;if(!cm||!MARKETS[cm]||cm===currentMarket())return '';return cm}
+function dailyUrl(market){
+  const root=(window.CHART_PAGE==='advanced')?'../data/':'data/';
+  return root+(isMacroMarket(market)?'macro/':'')+market+'.json';
+}
+function isMonthlySeries(srcRows){
+  if(!srcRows||srcRows.length<4) return false;
+  const ts=srcRows.map(r=>Array.isArray(r)?r[0]:r.time).filter(t=>t!=null);
+  const n=Math.min(12,ts.length-1); if(n<3) return false;
+  const gaps=[];
+  for(let i=ts.length-n;i<ts.length;i++) gaps.push((ts[i]-ts[i-1])/86400);
+  gaps.sort((a,b)=>a-b);
+  return gaps[Math.floor(gaps.length/2)]>=20;
+}
+function locfAlignCloses(srcRows, times, opts){
+  opts=opts||{};
+  const src=srcRows.map(r=>Array.isArray(r)?{time:r[0],close:r[4]}:r).filter(r=>r&&r.time!=null);
+  const firstT=src.length?src[0].time:null;
+  let lastT=src.length?src[src.length-1].time:null;
+  // Monthly prints (CPI) stay valid until the next release; extend LOCF to series 1's end.
+  if(opts.extend||isMonthlySeries(srcRows)) lastT=times.length?times[times.length-1]:lastT;
+  const out=new Array(times.length).fill(null);
+  let j=0, last=null;
+  for(let i=0;i<times.length;i++){
+    const t=times[i];
+    if(firstT==null||t<firstT||(lastT!=null&&t>lastT)) continue;
+    while(j<src.length&&src[j].time<=t){
+      if(src[j].close>0) last={time:src[j].time,close:src[j].close};
+      j++;
+    }
+    if(last) out[i]=last.close;
+  }
+  return out;
+}
+function populateMarketSelects(){
+  const m=document.getElementById('m');
+  if(m&&!m.querySelector('option[value="goldUSD"]')){
+    const g=document.createElement('optgroup'); g.label='Macro';
+    for(const id of MACRO_IDS){
+      const o=document.createElement('option'); o.value=id; o.textContent=MARKETS[id].label; g.appendChild(o);
+    }
+    m.appendChild(g);
+  }
+  const cm=document.getElementById('cm');
+  if(cm&&!cm.querySelector('option[value="combinedUSD"]')){
+    const add=(label,ids)=>{
+      const g=document.createElement('optgroup'); g.label=label;
+      for(const id of ids){
+        const o=document.createElement('option'); o.value=id; o.textContent=MARKETS[id].label; g.appendChild(o);
+      }
+      cm.appendChild(g);
+    };
+    add('Bitcoin',BTC_IDS);
+    add('Macro',MACRO_IDS);
+  }
+}
 // Combined splice (UTC): Mt. Gox through 2013-12-31, Bitstamp 2014-01-01–2016-12-31, Coinbase from 2017-01-01.
 const SPLICE='Combined history: Mt. Gox through 2013-12-31, then Bitstamp from 2014-01-01 through 2016-12-31, then Coinbase from 2017-01-01.';
 // interval name -> [seconds, native granularity used to build it]
@@ -49,8 +121,7 @@ function clampRow(r){const lo=Math.min(r[1],r[4]),hi=Math.max(r[1],r[4]);
 async function getDaily(market){
   market=market||currentMarket();
   if(dailyCache[market])return dailyCache[market];
-  const dataBase=(window.CHART_PAGE==='advanced')?'../data/':'data/';
-  const base=await (await fetch(dataBase+market+'.json',{cache:'no-cache'})).json();
+  const base=await (await fetch(dailyUrl(market),{cache:'no-cache'})).json();
   const live=(MARKETS[market]||{}).live;
   const last=base.length?base[base.length-1][0]:0;
   const now=Math.floor(Date.now()/1000);let fresh=[];
@@ -127,3 +198,10 @@ async function loadBars(interval,start,end,onProgress){
   const bars=rows.filter(r=>r[0]+sec>start).map(toBar);
   bars._note=note;return bars;
 }
+populateMarketSelects();
+window.isMacroMarket=isMacroMarket;
+window.isBtcMarket=isBtcMarket;
+window.shortMarketLabel=shortMarketLabel;
+window.currentCompare=currentCompare;
+window.locfAlignCloses=locfAlignCloses;
+window.MACRO_IDS=MACRO_IDS;

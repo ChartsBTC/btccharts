@@ -139,7 +139,7 @@ function epochEnabled(){return !!( $('ep')&&$('ep').checked )}
 
 
 let lastRatio=null;
-function ratioKind(){return ($('rp')&&$('rp').value)||''}
+function ratioKind(){if(typeof currentCompare==='function'&&currentCompare())return 'compare';return ($('rp')&&$('rp').value)||''}
 function isMayerRatio(kind, ma, len){
   return kind==='mayer'||(ma==='SMA'&&+len===200);
 }
@@ -286,6 +286,7 @@ function addPricePercentileBands(chart, computed, opts){
       lastValueVisible:true,
       crosshairMarkerVisible:false,
       title:lv.p+'% '+formatBandPrice(last),
+      priceScaleId:typeof series1ScaleId==='function'?series1ScaleId():'right',
     });
     s.setData(data);
     series.push(s);
@@ -388,6 +389,11 @@ function computeRatio(bars, kind){
       return d>0?powerLawPrice(d,fit.a,fit.b):null;
     });
     title='Price / Power Law'; short=title; source='Power Law';
+  }else if(kind==='compare'){
+    const cmp=window.lastCompare;
+    if(!cmp||!cmp.byTime) return null;
+    overlay=bars.map(b=>{const v=cmp.byTime.get(b.time);return v>0?v:null});
+    title=cmp.title||'Compare'; short=cmp.short||title; source=cmp.source||'Compare';
   }else return null;
   const points=[];
   for(let i=0;i<bars.length;i++){
@@ -401,8 +407,13 @@ function computeRatio(bars, kind){
 }
 function formatRatioValue(v){
   if(v==null||!isFinite(v)) return '';
-  if(v>=10) return v.toFixed(2);
-  return v.toFixed(3);
+  const a=Math.abs(v);
+  if(a>=1000) return v.toLocaleString('en-US',{maximumFractionDigits:1});
+  if(a>=10) return v.toFixed(2);
+  if(a>=1) return v.toFixed(3);
+  if(a>=0.01) return v.toFixed(4);
+  if(a>=0.0001) return v.toFixed(6);
+  return v.toExponential(2);
 }
 function ensureRatioOverlay(chart, bars){
   const kind=ratioKind();
@@ -412,7 +423,7 @@ function ensureRatioOverlay(chart, bars){
     const has=($('a1')&&$('a1').value==='SMA'&&+$('m1').value===200)||($('a2')&&$('a2').value==='SMA'&&+$('m2').value===200);
     if(!has){
       const ma=TA.SMA(C,200);
-      const s=chart.addLineSeries({color:'#e53935',lineWidth:2,priceLineVisible:false,lastValueVisible:false,title:'200-day SMA'});
+      const s=chart.addLineSeries({color:'#e53935',lineWidth:2,priceLineVisible:false,lastValueVisible:false,title:'200-day SMA',priceScaleId:typeof series1ScaleId==='function'?series1ScaleId():'right'});
       s.setData(bars.map((b,i)=>{const v=ma[i];return v==null||!isFinite(v)?{time:b.time}:{time:b.time,value:v}}));
     }
   }
@@ -430,12 +441,14 @@ function addRatioPanel(computed, opts){
   const ch=mkChart(el,{timeScale:{visible:!!opts.timeVisible}});
   if(opts.sync!==false) charts.push(ch);
   attachRatioPercentiles(computed);
+  const lastV=computed.last&&computed.last.value;
+  const prec=lastV!=null&&Math.abs(lastV)<0.01?6:lastV!=null&&Math.abs(lastV)<1?4:3;
   const ls=ch.addLineSeries({
     color:opts.color||'#1565c0',
     lineWidth:1.5,
     priceLineVisible:false,
     lastValueVisible:true,
-    priceFormat:{type:'price',precision:3,minMove:0.001},
+    priceFormat:{type:'price',precision:prec,minMove:Math.pow(10,-prec)},
   });
   ls.setData(computed.points.map(p=>({time:p.time,value:p.value})));
   ls.createPriceLine({price:1,color:'#e53935',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'1.0'});

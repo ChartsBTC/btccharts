@@ -219,3 +219,22 @@ body.page-classic #r optgroup,
 body.page-classic #i option[value="Cycle"]{display:none !important}
 .submenu a{text-decoration:none;margin:0 2px}
 .submenu a.active{color:var(--fg)}
+
+#compareBox{display:block;margin-top:6px}
+#compareBox select{max-width:150px}
+
+body.non-btc #viewToggle [data-cy="1"],
+body.non-btc #vt option[value="powerlaw"],
+body.non-btc #vt option[value="sats"],
+body.non-btc #vt option[value="epoch"],
+body.non-btc #vt option[value="hcycles"],
+body.non-btc #scaleToggle [data-scale="loglog"],
+body.non-btc #markerBox,
+body.non-btc #rp option[value="mayer"],
+body.non-btc #rp option[value="pl"],
+body.non-btc #r optgroup,
+body.non-btc #i option[value="Cycle"],
+body.compare-on label:has(#da),
+body.compare-on label:has(#p),
+body.compare-on #scaleToggle [data-scale="loglog"],
+body.compare-on #ratioBox{display:none !important}
