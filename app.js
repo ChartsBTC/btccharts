@@ -2,7 +2,7 @@ const $=id=>document.getElementById(id);
 const LW=LightweightCharts;
 
 const PUBLIC_CHART_BASE='https://chartsbtc.github.io/btccharts/';
-const ADVANCED_HASH_IDS=['cy','ll','pl','vt','rp','rpl','ep','ch','cl','hv','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','da','ca','cp','ym','otd','ott','rb','an','cm','rma','rme','el','ss','sp'];
+const ADVANCED_HASH_IDS=['cy','ll','pl','vt','rp','rpl','ep','ch','cl','hv','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','da','ca','cp','ym','otd','ott','rb','an','cm','rma','rme','el','ss','sp','sf','sh'];
 function isClassicPage(){return window.CHART_PAGE==='classic'}
 function isAdvancedPage(){return window.CHART_PAGE==='advanced'}
 function hashHasAdvanced(hash){
@@ -74,7 +74,7 @@ function initTheme(){
 }
 
 
-const FIELDS=['m','cm','sp','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','da','cy','ca','cp','ch','cl','hv','ll','pl','ep','rp','rpl','vt','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','ym','otd','ott','rb','an','rma','rme','el','ss'];
+const FIELDS=['m','cm','sp','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','da','cy','ca','cp','ch','cl','hv','ll','pl','ep','rp','rpl','vt','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','ym','otd','ott','rb','an','rma','rme','el','ss','sf','sh'];
 // populate indicator selects (only implemented ones, original naming)
 document.querySelectorAll('select.ind').forEach(s=>{s.innerHTML='<option value="">None</option>'+Object.entries(INDICATORS).map(([k,v])=>`<option value="${k}">${v.label.replace(/ \(.*/,'')}</option>`).join('')});
 
@@ -86,13 +86,13 @@ function buildHash(){const h=[];const skip=isClassicPage()?new Set(ADVANCED_HASH
   return h.join('z')}
 function parseHash(hash){ if(!hash)return;
   // reset everything to blank/unchecked; hash fully describes state (original reset v,t,r)
-  for(const id of FIELDS){const e=$(id);if(!e)continue;if(id==='m'){e.value='combinedUSD';continue}if(e.type==='checkbox')e.checked=false;else e.value=({m1:'10',m2:'25',ca:'low',cp:'usd',pma:'200d',pmm:'panel',rm:'cagr',rn:'4',pb:'1, 5, 20, 50, 80, 95, 99',blw:'50',ym:'raw',rb:'decade'})[id]||''}
+  for(const id of FIELDS){const e=$(id);if(!e)continue;if(id==='m'){e.value='combinedUSD';continue}if(e.type==='checkbox')e.checked=false;else e.value=({m1:'10',m2:'25',ca:'low',cp:'usd',pma:'200d',pmm:'panel',rm:'cagr',rn:'4',pb:'1, 5, 20, 50, 80, 95, 99',blw:'50',ym:'raw',rb:'decade',sh:'current'})[id]||''}
   // Longest-id match so values may contain "g" (e.g. mgmtgoxUSD). The original split("g") would turn that into mtogxUSD.
   const ids=FIELDS.slice().sort((a,b)=>b.length-a.length);
   for(const part of hash.split('z')){const id=ids.find(x=>part===x||part.startsWith(x+'g'));if(!id)continue;const e=$(id);
     if(e.type==='checkbox')e.checked=true;else e.value=unescape(part.slice(id.length+1))}}
 function syncCustom(){ $('CustomTimeBox').style.display=$('c').checked?'block':'none'; $('r').style.display=$('c').checked?'none':'';}
-const BTC_ONLY_VIEWS=['powerlaw','sats','epoch','hcycles'];
+const BTC_ONLY_VIEWS=['powerlaw','sats','epoch','hcycles','spiral'];
 function syncSeriesUi(){
   const m=typeof currentMarket==='function'?currentMarket():'combinedUSD';
   const btc=typeof isBtcMarket!=='function'||isBtcMarket(m);
@@ -131,6 +131,7 @@ function syncViewToggle(){
   document.body.classList.toggle('scout-onthisday',vt==='onthisday' && !on);
   document.body.classList.toggle('scout-hcycles',vt==='hcycles' && !on);
   document.body.classList.toggle('scout-ranges',vt==='ranges' && !on);
+  document.body.classList.toggle('scout-spiral',vt==='spiral' && !on);
   if(vt==='onthisday' && typeof syncOnThisDayUi==='function') syncOnThisDayUi();
   document.body.classList.toggle('mode-mult',vt==='returns' && ($('rm')&&$('rm').value==='mult') && !on);
   document.querySelectorAll('#viewToggle button').forEach(b=>b.classList.toggle('on',(b.dataset.cy==='1')===on && !vt));
@@ -141,6 +142,7 @@ function syncViewToggle(){
   const yo=$('yearOpts'); if(yo) yo.hidden=!(vt==='calyear' && !on);
   const oo=$('otdOpts'); if(oo) oo.hidden=!(vt==='onthisday' && !on);
   const rbo=$('rangeOpts'); if(rbo) rbo.hidden=!(vt==='ranges' && !on);
+  const spo=$('spiralOpts'); if(spo) spo.hidden=!(vt==='spiral' && !on);
   const showPct=!on && (vt==='powerlaw' || (vt==='pricema' && !($('pmm')&&$('pmm').value==='osc')) || (!vt && typeof ratioKind==='function' && ratioKind())) && !(typeof parsePctList==='function' && parsePctList().length===0 && ($('pb')&&($('pb').value==='off'||$('pb').value==='none')));
   document.body.classList.toggle('has-pct-bands', showPct);
   const pbo=$('pctBandOpts'); if(pbo) pbo.hidden=!showPct;
@@ -397,7 +399,7 @@ function drawPowerLawUplot(u,xs,barAt){
 }
 
 let plSeries={};
-function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if(typeof clearScoutPlots==='function')clearScoutPlots();if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view','scout-view','scout-powerlaw','scout-drawdown','scout-ath','scout-sats','scout-pricema','scout-osc','scout-returns','mode-mult','scout-blend','scout-epoch','scout-calyear','scout-onthisday','has-otd-table','scout-hcycles','scout-ranges');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null;if($('plLegend')&&!($('pl')&&$('pl').checked)){$('plLegend').hidden=true;$('plLegend').textContent=''}}
+function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if(typeof clearScoutPlots==='function')clearScoutPlots();if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view','scout-view','scout-powerlaw','scout-drawdown','scout-ath','scout-sats','scout-pricema','scout-osc','scout-returns','mode-mult','scout-blend','scout-epoch','scout-calyear','scout-onthisday','has-otd-table','scout-hcycles','scout-ranges','scout-spiral');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null;if($('plLegend')&&!($('pl')&&$('pl').checked)){$('plLegend').hidden=true;$('plLegend').textContent=''}}
 
 
 function macroSourceCredit(m,cm){
@@ -1214,12 +1216,15 @@ function isMobileUa(){
 }
 function chartTitleLine(){
   const vt=($('vt')&&$('vt').value)||'';
-  if(vt==='powerlaw'||vt==='drawdown'||vt==='ath'||vt==='sats'||vt==='pricema'||vt==='returns'||vt==='epoch'||vt==='calyear'||vt==='onthisday'||vt==='hcycles'||vt==='ranges'){
+  if(vt==='powerlaw'||vt==='drawdown'||vt==='ath'||vt==='sats'||vt==='pricema'||vt==='returns'||vt==='epoch'||vt==='calyear'||vt==='onthisday'||vt==='hcycles'||vt==='ranges'||vt==='spiral'){
     const m=currentMarket();
     const name=m==='combinedUSD'?'BTC/USD Combined':('BTC/USD '+marketLabel(m).replace(/ \(USD\)/,''));
     if(vt==='ranges'){
       const pow=($('rb')&&$('rb').value)==='pow2';
       return name+' · Days in price ranges'+(pow?' (powers of 2)':'');
+    }
+    if(vt==='spiral'){
+      return name+' · Bitcoin Spiral';
     }
     if(vt==='hcycles'){
       return name+' · Halving cycles (USD)';
@@ -1711,7 +1716,7 @@ document.querySelectorAll('#viewToggle button').forEach(b=>b.onclick=()=>{const 
 $('vt')&&$('vt').addEventListener('change',()=>{if($('vt').value)$('cy').checked=false;draw(1)});
 $('sp')&&$('sp').addEventListener('change',()=>{const id=$('sp').value; if(id&&typeof applyScoutPreset==='function'){applyScoutPreset(id);draw(1);return} draw(1)});
 
-['pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','ym','ott','rb','rma','rme','el','ss'].forEach(id=>$(id)&&$(id).addEventListener('change',()=>draw(1)));
+['pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','ym','ott','rb','rma','rme','el','ss','sf','sh'].forEach(id=>$(id)&&$(id).addEventListener('change',()=>draw(1)));
 ['otdMonth','otdDay'].forEach(id=>$(id)&&$(id).addEventListener('change',()=>{
   if(typeof writeOnThisDay==='function') writeOnThisDay({m:parseInt($('otdMonth').value,10),d:parseInt($('otdDay').value,10)});
   draw(1);

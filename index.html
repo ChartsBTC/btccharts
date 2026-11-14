@@ -104,6 +104,7 @@
       <option value="calyear">Calendar year overlay</option>
       <option value="onthisday">On this day</option>
       <option value="hcycles">Halving cycles (USD)</option>
+      <option value="spiral">Bitcoin Spiral</option>
       <option value="ranges">Days in price ranges</option>
     </select>
   </label>
@@ -134,6 +135,13 @@
     <label>Style <select id="pmm">
       <option value="panel" selected>Price + ratio</option>
       <option value="osc">Percentile oscillator</option>
+    </select></label>
+  </span>
+  <span id="spiralOpts" class="scout-opts" hidden>
+    <label><input type="checkbox" id="sf">From 2011</label>
+    <label>Highlight <select id="sh">
+      <option value="current" selected>Current epoch</option>
+      <option value="off">None</option>
     </select></label>
   </span>
   <span id="rangeOpts" class="scout-opts" hidden>

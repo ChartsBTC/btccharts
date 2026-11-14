@@ -1047,6 +1047,7 @@ async function renderScout(kind){
   if(kind==='calyear'){await renderCalYearView();return true}
   if(kind==='onthisday'){await renderOnThisDayView();return true}
   if(kind==='hcycles'){await renderHcyclesView();return true}
+  if(kind==='spiral'){await renderSpiralView();return true}
   if(kind==='ranges'){await renderRangesView();return true}
   return false;
 }
@@ -2668,3 +2669,288 @@ window.removeFlatSpan=removeFlatSpan;
 window.renderAnnList=renderAnnList;
 window.formatSpanYears=formatSpanYears;
 window.formatKx=formatKx;
+
+const SPIRAL_GENESIS=Date.UTC(2009,0,3)/1000;
+const SPIRAL_EPOCH_BLOCKS=210000;
+const SPIRAL_BLOCK_SEC=600;
+const SPIRAL_EPOCH_LEN=SPIRAL_EPOCH_BLOCKS*SPIRAL_BLOCK_SEC;
+const SPIRAL_MIN_PX=0.05;
+const SPIRAL_RINGS=[1,10,100,1000,10000,100000,1000000];
+const SPIRAL_SPOKE_BLOCKS=[26250,52500,78750,105000,131250,157500,183750];
+
+function spiralCuts(){
+  return [SPIRAL_GENESIS].concat(HALVINGS.map(h=>h.time));
+}
+function spiralNextHalvingTime(){
+  const last=HALVINGS.length?HALVINGS[HALVINGS.length-1].time:SPIRAL_GENESIS;
+  return last+SPIRAL_EPOCH_LEN;
+}
+function spiralEpoch(t){
+  const cuts=spiralCuts();
+  let i=0;
+  while(i+1<cuts.length && t>=cuts[i+1]) i++;
+  const t0=cuts[i];
+  const t1=(i+1<cuts.length)?cuts[i+1]:(t0+SPIRAL_EPOCH_LEN);
+  const span=Math.max(1,t1-t0);
+  let frac=(t-t0)/span;
+  if(frac<0) frac=0;
+  if(frac>1) frac=1;
+  return {epoch:i, frac:frac, t0:t0, t1:t1, blocks:frac*SPIRAL_EPOCH_BLOCKS, pct:frac*100, next:t1};
+}
+function spiralPolar(frac, r, cx, cy){
+  const a=2*Math.PI*frac;
+  return {x:cx+r*Math.sin(a), y:cy-r*Math.cos(a)};
+}
+function spiralRadiusOf(price, r0, r1){
+  const p=Math.max(SPIRAL_MIN_PX, Math.min(1e6, price));
+  const lo=Math.log10(SPIRAL_MIN_PX), hi=Math.log10(1e6);
+  return r0+(r1-r0)*((Math.log10(p)-lo)/(hi-lo));
+}
+function spiralRingLabel(v){
+  if(v>=1000000) return '$1M';
+  if(v>=1000) return '$'+(v/1000)+'k';
+  return '$'+String(v);
+}
+function spiralBottoms(bars){
+  if(typeof detectCycles!=='function'||!bars||!bars.length) return [];
+  const cycles=detectCycles(bars);
+  const out=[];
+  const seen=new Set();
+  const add=(pt,kind)=>{
+    if(!pt||!pt.time) return;
+    if(seen.has(pt.time)) return;
+    seen.add(pt.time);
+    out.push({time:pt.time, price:pt.close!=null?pt.close:pt.price, date:pt.date||(typeof isoUTC==='function'?isoUTC(pt.time):''), kind:kind||'bottom'});
+  };
+  for(const c of cycles){
+    if(c===cycles[0] && c.startLow) add(c.startLow,'start');
+    if(c.endLow) add(c.endLow, c.open||c.lowSoFar?'recent':'bottom');
+  }
+  out.sort((a,b)=>a.time-b.time);
+  return out;
+}
+function spiralBarAt(bars, t){
+  if(!bars||!bars.length) return null;
+  let best=bars[0], bd=Math.abs(bars[0].time-t);
+  for(const b of bars){const d=Math.abs(b.time-t); if(d<bd){bd=d;best=b}}
+  return best;
+}
+
+async function renderSpiralView(){
+  clearCharts();
+  document.body.classList.add('scout-view','scout-spiral');
+  $('charts').classList.remove('has-volume');
+  const raw=await getDaily('combinedUSD');
+  const allBars=raw.map(toBar).filter(b=>b&&b.close>0);
+  const cut=Date.UTC(2011,0,1)/1000;
+  let daily=allBars;
+  if($('sf')&&$('sf').checked) daily=allBars.filter(b=>b.time>=cut);
+  if(daily.length<10){status('Not enough Bitcoin history to draw the spiral.');return}
+  const highlight=!($('sh')&&$('sh').value==='off');
+  const t0=daily[0].time;
+  const aths=computeAthSeries(allBars).aths.filter(a=>a.time>=t0);
+  const bottoms=spiralBottoms(allBars).filter(b=>b.time>=t0);
+  const last=daily.at(-1);
+  const pos=spiralEpoch(last.time);
+  const nextT=spiralNextHalvingTime();
+  const nextDate=isoUTC(nextT);
+  const epochNo=pos.epoch+1;
+  window.lastScout={kind:'spiral', last, pos, nextHalving:nextDate, bottoms, aths, from2011:!!($('sf')&&$('sf').checked), highlight};
+  status('Bitcoin Spiral · Combined daily · epoch '+epochNo+' · '+pos.pct.toFixed(1)+'% of the way · last $'+usd(last.close)+' · next halving ~ '+nextDate);
+  if($('sourceNote')){
+    const splice=(typeof SPLICE==='string'?SPLICE+' ':'');
+    $('sourceNote').textContent=splice+'Angle is date-based (no block heights): official halving dates, linear interpolation between them, and ~10 minutes per block after 2024-04-20. Next halving ~ '+nextDate+'.';
+  }
+  const main=$('main');
+  main.innerHTML='';
+  $('subs').innerHTML='';
+  setEpochLegend(false);
+
+  attachPaintCanvas(main,(ctx,w,h,canvas)=>{
+    const th=T();
+    const dark=typeof isDark==='function'&&isDark();
+    ctx.fillStyle=th.bg; ctx.fillRect(0,0,w,h);
+    const padL=118, padR=96, padT=72, padB=46;
+    const cx=padL+(w-padL-padR)/2;
+    const cy=padT+(h-padT-padB)/2;
+    const rMax=Math.max(40, Math.min((w-padL-padR)/2, (h-padT-padB)/2)-4);
+    const rMin=Math.max(10, rMax*0.06);
+    const rOf=p=>spiralRadiusOf(p, rMin, rMax);
+    const xy=(frac,price)=>spiralPolar(frac, rOf(price), cx, cy);
+
+    // rings + spokes
+    ctx.lineWidth=1;
+    ctx.strokeStyle=dark?'#3a3a3a':'#d8d8d8';
+    for(const v of SPIRAL_RINGS){
+      const r=rOf(v);
+      ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.stroke();
+    }
+    ctx.beginPath(); ctx.arc(cx,cy,rMax,0,Math.PI*2); ctx.strokeStyle=dark?'#555':'#bbb'; ctx.stroke();
+    const spokeFracs=[0].concat(SPIRAL_SPOKE_BLOCKS.map(b=>b/SPIRAL_EPOCH_BLOCKS));
+    ctx.strokeStyle=dark?'#3a3a3a':'#d8d8d8';
+    for(const f of spokeFracs){
+      const a=2*Math.PI*f;
+      ctx.beginPath();
+      ctx.moveTo(cx+rMin*Math.sin(a), cy-rMin*Math.cos(a));
+      ctx.lineTo(cx+rMax*Math.sin(a), cy-rMax*Math.cos(a));
+      ctx.stroke();
+    }
+
+    // spoke labels
+    ctx.fillStyle=th.text;
+    ctx.font='11px Verdana,Arial,sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    const labelR=rMax+16;
+    const spokeLabs=[''].concat(SPIRAL_SPOKE_BLOCKS.map(b=>{
+      const k=b/1000;
+      return (k%1?k.toFixed(2):String(k))+'k blocks';
+    }));
+    spokeFracs.forEach((f,i)=>{
+      if(i===0) return; // 0° used for price labels on the right? 0 is top; 105k is bottom. Price labels go on the right (52.5k / 90°).
+      const p=spiralPolar(f, labelR, cx, cy);
+      let align='center', base='middle';
+      if(f>0.02 && f<0.23){align='left'}
+      else if(f>0.27 && f<0.48){align='left'}
+      else if(f>0.52 && f<0.73){align='right'}
+      else if(f>0.77 && f<0.98){align='right'}
+      ctx.textAlign=align;
+      ctx.fillText(spokeLabs[i], p.x, p.y);
+    });
+
+    // price labels sit on the right-hand spoke, just above the rings;
+    // the 52.5k spoke label stays outside the outer ring.
+    ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.font='11px Verdana,Arial,sans-serif';
+    ctx.fillStyle=th.muted||th.text;
+    for(const v of SPIRAL_RINGS){
+      const r=rOf(v);
+      ctx.fillText(spiralRingLabel(v), cx+r, cy-5);
+    }
+
+    // title + subtitle + legend
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillStyle=th.title||th.text;
+    ctx.font='bold 20px Verdana,Arial,sans-serif';
+    ctx.fillText('Bitcoin Spiral', 16, 12);
+    ctx.font='11px Verdana,Arial,sans-serif';
+    ctx.fillStyle=th.muted||th.text;
+    ctx.fillText('Pre-halving, halving 1, 2, 3, 4  ·  0, 210k, 420k, 630k, 840k blocks', w/2-10, 16);
+    // legend
+    const items=[
+      {kind:'line', color:'#f5a623', label:"Bitcoin"},
+      {kind:'dot', color:'#0d47a1', label:"ATH's"},
+      {kind:'dot', color:'#9b1b1b', label:'Bottoms'},
+      {kind:'dot', color:'#2e7d32', label:'Halvings'},
+    ];
+    let ly=42;
+    items.forEach(it=>{
+      if(it.kind==='line'){
+        ctx.strokeStyle=it.color; ctx.lineWidth=3; ctx.lineCap='round';
+        ctx.beginPath(); ctx.moveTo(16,ly+6); ctx.lineTo(40,ly+6); ctx.stroke();
+      }else{
+        ctx.fillStyle=it.color;
+        ctx.beginPath(); ctx.arc(28,ly+6,5,0,Math.PI*2); ctx.fill();
+      }
+      ctx.fillStyle=th.text; ctx.font='12px Verdana,Arial,sans-serif'; ctx.textBaseline='middle'; ctx.textAlign='left';
+      ctx.fillText(it.label, 48, ly+6);
+      ly+=18;
+    });
+
+    // date-based note
+    ctx.font='10px Verdana,Arial,sans-serif';
+    ctx.fillStyle=th.muted||th.text;
+    ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.fillText('Positions are date-based (no block heights)  ·  next halving ~ '+nextDate, cx, h-8);
+
+    // points
+    const pts=[];
+    const maxEpoch=spiralEpoch(last.time).epoch;
+    daily.forEach(b=>{
+      const ep=spiralEpoch(b.time);
+      const p=xy(ep.frac, b.close);
+      pts.push(Object.assign(p,{time:b.time,price:b.close,epoch:ep.epoch,frac:ep.frac,pct:ep.pct,blocks:ep.blocks}));
+    });
+
+    // draw one path per epoch so the wrap at 0° does not cut across the chart
+    const byEp=[];
+    for(const p of pts){
+      const bucket=byEp[p.epoch]||(byEp[p.epoch]=[]);
+      bucket.push(p);
+    }
+    // close previous epoch at frac=1 with the first point of the next (same price/radius, top spoke)
+    for(let e=0;e<byEp.length-1;e++){
+      const cur=byEp[e], nxt=byEp[e+1];
+      if(cur&&cur.length&&nxt&&nxt.length){
+        const p=nxt[0];
+        cur.push({x:xy(1,p.price).x, y:xy(1,p.price).y, time:p.time, price:p.price, epoch:e, frac:1, pct:100, blocks:SPIRAL_EPOCH_BLOCKS});
+      }
+    }
+    const orange='#f5a623';
+    const muted=dark?'rgba(245,166,35,0.55)':'rgba(245,166,35,0.5)';
+    byEp.forEach((path,e)=>{
+      if(!path||path.length<2) return;
+      const isCur=highlight && e===maxEpoch;
+      ctx.strokeStyle=(!highlight||isCur)?orange:muted;
+      ctx.lineWidth=isCur?3.4:2.2;
+      ctx.lineJoin='round'; ctx.lineCap='round';
+      ctx.beginPath();
+      path.forEach((p,i)=>{ if(i===0) ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y); });
+      ctx.stroke();
+    });
+
+    function dot(x,y,color,r){
+      ctx.fillStyle=color;
+      ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle=dark?'rgba(0,0,0,0.45)':'rgba(255,255,255,0.8)';
+      ctx.lineWidth=1; ctx.stroke();
+    }
+
+    // ATH dots (closing highs)
+    aths.forEach(a=>{
+      const ep=spiralEpoch(a.time);
+      const p=xy(ep.frac, a.price);
+      dot(p.x,p.y,'#0d47a1',2.6);
+    });
+    // bottoms
+    bottoms.forEach(b=>{
+      const ep=spiralEpoch(b.time);
+      const p=xy(ep.frac, b.price);
+      dot(p.x,p.y,'#9b1b1b',4.2);
+    });
+    // halvings at 0°
+    HALVINGS.forEach(h=>{
+      const b=spiralBarAt(daily, h.time);
+      if(!b) return;
+      const p=xy(0, b.close);
+      dot(p.x,p.y,'#2e7d32',5);
+    });
+
+    canvas._spiral={pts, cx, cy, rMin, rMax, bottoms, aths};
+  });
+
+  const cnv=window.scoutCanvas;
+  if(cnv){
+    cnv.style.cursor='crosshair';
+    const onMove=ev=>{
+      const pack=cnv._spiral; if(!pack||!pack.pts||!pack.pts.length) return;
+      const rect=cnv.getBoundingClientRect();
+      const x=ev.clientX-rect.left, y=ev.clientY-rect.top;
+      let best=null, bd=12;
+      for(const p of pack.pts){
+        const d=Math.hypot(p.x-x,p.y-y);
+        if(d<bd){bd=d;best=p}
+      }
+      if(!best){$('legend').textContent='';return}
+      const bits=[isoUTC(best.time), '$'+usd(best.price), 'epoch '+(best.epoch+1), best.pct.toFixed(1)+'% of the turn', '~'+Math.round(best.blocks).toLocaleString('en-US')+' of 210,000 blocks (est.)'];
+      const ath=pack.aths&&pack.aths.find(a=>a.time===best.time);
+      if(ath) bits.push('ATH');
+      const bot=pack.bottoms&&pack.bottoms.find(b=>b.time===best.time);
+      if(bot) bits.push(bot.kind==='recent'?'cycle low so far':'cycle bottom');
+      $('legend').textContent=bits.join('  ·  ');
+    };
+    cnv.addEventListener('mousemove', onMove);
+    cnv.addEventListener('mouseleave', ()=>{$('legend').textContent=''});
+  }
+}
+window.renderSpiralView=renderSpiralView;
+

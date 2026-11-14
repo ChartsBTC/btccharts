@@ -172,6 +172,11 @@ body.scout-hcycles #scaleToggle,body.scout-hcycles #markerBox,body.scout-hcycles
 body.scout-hcycles #main{height:540px}
 body.scout-hcycles #chartWatermark{bottom:52px}
 
+
+body.scout-spiral #spiralOpts{display:inline-flex}
+body.scout-spiral #scaleToggle,body.scout-spiral #markerBox,body.scout-spiral #ratioBox,body.scout-spiral #ratioLogBox{display:none}
+body.scout-spiral #main{height:660px}
+body.scout-spiral #chartWatermark{bottom:56px;left:16px}
 body.scout-ranges #rangeOpts{display:inline-flex}
 body.scout-ranges #scaleToggle,body.scout-ranges #markerBox,body.scout-ranges #ratioBox,body.scout-ranges #ratioLogBox{display:none}
 body.scout-ranges #main{height:560px}
@@ -212,6 +217,7 @@ body.page-classic #returnsOpts,
 body.page-classic #yearOpts,
 body.page-classic #otdOpts,
 body.page-classic #rangeOpts,
+body.page-classic #spiralOpts,
 body.page-classic #annBox,
 body.page-classic #scaleToggle [data-scale="loglog"],
 body.page-classic label:has(#da),
@@ -228,6 +234,7 @@ body.non-btc #vt option[value="powerlaw"],
 body.non-btc #vt option[value="sats"],
 body.non-btc #vt option[value="epoch"],
 body.non-btc #vt option[value="hcycles"],
+body.non-btc #vt option[value="spiral"],
 body.non-btc #scaleToggle [data-scale="loglog"],
 body.non-btc #markerBox,
 body.non-btc #rp option[value="mayer"],
