@@ -477,7 +477,10 @@ function addRatioPanel(computed, opts){
     lastValueVisible:!hideEnd,
     priceFormat:{type:'price',precision:prec,minMove:Math.pow(10,-prec)},
   });
-  ls.setData(computed.points.map(p=>({time:p.time,value:p.value})));
+  const ratioTimes=opts.times||((typeof bars!=='undefined'&&bars&&bars.length)?bars.map(b=>b.time):null);
+  const ratioPts=typeof window.padPointsToTimes==='function'?window.padPointsToTimes(computed.points.map(p=>({time:p.time,value:p.value})),ratioTimes):computed.points.map(p=>({time:p.time,value:p.value}));
+  ls.setData(ratioPts);
+  if(typeof window.markAlignSeries==='function') window.markAlignSeries(ch,ls,ratioPts,'right');
   if(!($('rme')&&$('rme').checked)){
     ls.createPriceLine({price:1,color:'#e53935',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'1.0'});
   }
@@ -493,7 +496,7 @@ function addRatioPanel(computed, opts){
         title:(maSpec.replace('y','-year')||'MA')+' MA',
         priceFormat:{type:'price',precision:prec,minMove:Math.pow(10,-prec)},
       });
-      ms.setData(ma);
+      ms.setData(typeof window.padPointsToTimes==='function'?window.padPointsToTimes(ma,ratioTimes):ma);
       computed.ma=ma;
       computed.maLast=ma.at(-1);
     }
@@ -514,6 +517,7 @@ function addRatioPanel(computed, opts){
     const ghost=ch.addLineSeries({color:'rgba(0,0,0,0)',lineVisible:false,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});
     ghost.setData([{time:t0,value:Math.min(...bandVals,1)},{time:t1,value:Math.max(...bandVals,1)}]);
   }
+  ch.priceScale('left').applyOptions({visible:true,minimumWidth:80,borderColor:'#ccc'});
   ch.priceScale('right').applyOptions({
     mode:log?LW.PriceScaleMode.Logarithmic:LW.PriceScaleMode.Normal,
     scaleMargins:{top:.08,bottom:.08},
@@ -1073,12 +1077,21 @@ function computeAthSeries(bars){
   }
   return {aths,athLine,dd,bars:usable};
 }
-function syncScoutLw(){
-  charts.forEach(c=>c.priceScale('right').applyOptions({minimumWidth:80}));
-  charts.forEach(c=>c.timeScale().subscribeVisibleLogicalRangeChange(r=>{
-    if(syncing||!r)return;syncing=true;charts.forEach(o=>o!==c&&o.timeScale().setVisibleLogicalRange(r));syncing=false;
-  }));
-  if(charts[0]){charts[0].timeScale().fitContent();setTimeout(()=>charts[0].timeScale().fitContent(),50)}
+function syncScoutLw(times){
+  const t=times||(window.lastScout&&window.lastScout.shown?window.lastScout.shown.map(b=>b.time):((typeof bars!=='undefined'&&bars)?bars.map(b=>b.time):null));
+  if(typeof window.alignStackedCharts==='function') window.alignStackedCharts(charts,{times:t});
+  else {
+    charts.forEach(c=>c.priceScale('right').applyOptions({minimumWidth:80}));
+    charts.forEach(c=>c.timeScale().subscribeVisibleLogicalRangeChange(r=>{
+      if(syncing||!r)return;syncing=true;charts.forEach(o=>o!==c&&o.timeScale().setVisibleLogicalRange(r));syncing=false;
+    }));
+  }
+  if(charts[0]){
+    const _refit=()=>{charts[0].timeScale().fitContent();if(typeof window.equalizeChartGutters==='function')window.equalizeChartGutters(charts,t)};
+    charts[0].timeScale().fitContent();
+    setTimeout(_refit,50);
+    setTimeout(_refit,280);
+  }
 }
 function hookLegend(chart, fmt){
   chart.subscribeCrosshairMove(p=>{
@@ -1402,14 +1415,15 @@ async function renderPriceMaView(){
   const ch=mkChart(main,{localization:{priceFormatter:compact}});
   charts.push(ch);
   ch.priceScale('right').applyOptions({mode:LW.PriceScaleMode.Logarithmic,scaleMargins:{top:.06,bottom:.08}});
-  addEpochLineSeries(ch, shown.map(b=>({time:b.time,value:b.close})),{lineWidth:2,lastValueVisible:true});
+  const pxSeries=addEpochLineSeries(ch, shown.map(b=>({time:b.time,value:b.close})),{lineWidth:2,lastValueVisible:true});
+  if(typeof window.markAlignSeries==='function') window.markAlignSeries(ch, (pxSeries&&pxSeries.length)?pxSeries[pxSeries.length-1]:pxSeries, shown.map(b=>({time:b.time,value:b.close})),'right');
   setEpochLegend(true);
   const maPts=shown.map((b,i)=>{
     const p=points.find(x=>x.time===b.time);
     return p?{time:b.time,value:p.overlay}:{time:b.time};
   }).filter(p=>p.value!=null);
   ch.addLineSeries({color:'#e53935',lineWidth:2,priceLineVisible:false,lastValueVisible:false,title:spec.name}).setData(maPts);
-  addRatioPanel(computed,{log:true,big:true});
+  addRatioPanel(computed,{log:true,big:true,times:shown.map(b=>b.time)});
   addPricePercentileBands(ch, computed);
 
   hookLegend(ch,t=>{
@@ -1423,7 +1437,7 @@ async function renderPriceMaView(){
     }
     return text;
   });
-  syncScoutLw();
+  syncScoutLw(shown.map(b=>b.time));
 }
 
 
