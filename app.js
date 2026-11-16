@@ -206,8 +206,14 @@ function fillV2MissingHashDefaults(hash){
   if(typeof isV2Page!=='function'||!isV2Page()) return;
   snapshotV2FormDefaults();
   v2ParsedHashIds=v2HashPresentIds(hash);
-  if(v2ParsedHashIds.has('i')&&$('i')&&($('i').value==='auto'||$('i').value==='none'))$('i').value='';
-  if(v2ParsedHashIds.has('t')&&$('t')&&($('t').value==='none'||$('t').value==='None'))$('t').value='';
+  // igauto/tgnone have no matching <option value>, so the browser leaves the
+  // closed menu blank and reports .value as "". Reselect the empty "auto"/"None"
+  // options. selectedIndex<0 catches that case; literal "auto"/"none" covers a
+  // future option with those values.
+  const iEl=$('i');
+  if(iEl&&v2ParsedHashIds.has('i')&&(iEl.value==='auto'||iEl.value==='none'||iEl.selectedIndex<0)) iEl.value='';
+  const tEl=$('t');
+  if(tEl&&v2ParsedHashIds.has('t')&&(tEl.value==='none'||tEl.value==='None'||tEl.selectedIndex<0)) tEl.value='';
   if(!v2FormDefaults) return;
   const themeOnly=v2ParsedHashIds.size===0;
   if(themeOnly){
