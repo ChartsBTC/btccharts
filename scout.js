@@ -1487,7 +1487,7 @@ async function renderReturnsView(){
   const shown=sliceDisplay(daily);
   const pts=rollingLookback(daily, years, mode).filter(p=>!shown.length||p.time>=shown[0].time);
   if(pts.length<2){status('Not enough history for a '+years+'-year window.');return}
-  window.lastScout={kind:'returns',mode,years,points:pts};
+  window.lastScout={kind:'returns',mode,years,points:pts,shown};
   const main=$('main');
   main.innerHTML='';
   $('subs').innerHTML='';
@@ -1632,7 +1632,7 @@ async function renderEpochCandlesView(){
   const shown=sliceDisplay(daily);
   const candles=epochCandleSlices(shown);
   if(candles.length<1){status('Not enough data for epoch candles.');return}
-  window.lastScout={kind:'epoch',candles};
+  window.lastScout={kind:'epoch',candles,shown};
   const main=$('main');
   main.innerHTML='';
   $('subs').innerHTML='';

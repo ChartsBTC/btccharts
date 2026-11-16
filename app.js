@@ -85,16 +85,20 @@ document.querySelectorAll('select.ind').forEach(s=>{s.innerHTML='<option value="
 // ---- URL hash: <id>g<value> joined by z (bitcoincharts format) ----
 function buildHash(){const h=[];const skip=isClassicPage()?new Set(ADVANCED_HASH_IDS):null;
   for(const id of FIELDS){if(skip&&skip.has(id))continue;const e=$(id);if(!e)continue;
-  if(e.type==='checkbox'){if(e.checked)h.push(id)}else if(e.value)h.push(id+'g'+escape(e.value))}
+  if(e.type==='checkbox'){if(e.checked)h.push(id)}else if(e.value)h.push(id+'g'+escape(e.value));else if(typeof isV2Page==='function'&&isV2Page()&&id==='i')h.push('igauto');else if(typeof isV2Page==='function'&&isV2Page()&&id==='t')h.push('tgnone')}
   if(typeof isDark==='function'&&isDark())h.push('dk');
   return h.join('z')}
-function parseHash(hash){ if(!hash)return;
+function parseHash(hash){
+  if(typeof isV2Page==='function'&&isV2Page()) snapshotV2FormDefaults();
+  if(!hash){ if(typeof isV2Page==='function'&&isV2Page()) v2ParsedHashIds=new Set(); return; }
   // reset everything to blank/unchecked; hash fully describes state (original reset v,t,r)
   for(const id of FIELDS){const e=$(id);if(!e)continue;if(id==='m'){e.value='combinedUSD';continue}if(e.type==='checkbox')e.checked=false;else e.value=({m1:'10',m2:'25',ca:'low',cp:'usd',pma:'200d',pmm:'panel',rm:'cagr',rn:'4',pb:'1, 5, 20, 50, 80, 95, 99',blw:'50',ym:'raw',rb:'decade',sh:'current'})[id]||''}
   // Longest-id match so values may contain "g" (e.g. mgmtgoxUSD). The original split("g") would turn that into mtogxUSD.
   const ids=FIELDS.slice().sort((a,b)=>b.length-a.length);
   for(const part of hash.split('z')){const id=ids.find(x=>part===x||part.startsWith(x+'g'));if(!id)continue;const e=$(id);
-    if(e.type==='checkbox')e.checked=true;else e.value=unescape(part.slice(id.length+1))}}
+    if(e.type==='checkbox')e.checked=true;else e.value=unescape(part.slice(id.length+1))}
+  if(typeof fillV2MissingHashDefaults==='function') fillV2MissingHashDefaults(hash);
+}
 function syncCustom(){ $('CustomTimeBox').style.display=$('c').checked?'block':'none'; $('r').style.display=$('c').checked?'none':'';}
 const BTC_ONLY_VIEWS=['powerlaw','sats','epoch','hcycles','spiral'];
 function syncSeriesUi(){
@@ -184,13 +188,50 @@ function applyV2ViewDefaults(prevVt, prevCy, nextVt, nextCy){
     if(typeof syncCustom==='function') syncCustom();
   }
 }
+let v2FormDefaults=null, v2ParsedHashIds=new Set();
+function snapshotV2FormDefaults(){
+  if(v2FormDefaults||typeof isV2Page!=='function'||!isV2Page()) return;
+  const d={};
+  for(const id of FIELDS){const e=$(id);if(!e)continue;d[id]=e.type==='checkbox'?!!e.checked:e.value}
+  v2FormDefaults=d;
+}
+function v2HashPresentIds(hash){
+  const present=new Set();
+  if(!hash) return present;
+  const ids=FIELDS.slice().sort((a,b)=>b.length-a.length);
+  for(const part of hash.split('z')){const id=ids.find(x=>part===x||part.startsWith(x+'g'));if(id)present.add(id)}
+  return present;
+}
+function fillV2MissingHashDefaults(hash){
+  if(typeof isV2Page!=='function'||!isV2Page()) return;
+  snapshotV2FormDefaults();
+  v2ParsedHashIds=v2HashPresentIds(hash);
+  if(v2ParsedHashIds.has('i')&&$('i')&&($('i').value==='auto'||$('i').value==='none'))$('i').value='';
+  if(v2ParsedHashIds.has('t')&&$('t')&&($('t').value==='none'||$('t').value==='None'))$('t').value='';
+  if(!v2FormDefaults) return;
+  const themeOnly=v2ParsedHashIds.size===0;
+  if(themeOnly){
+    for(const id of FIELDS){
+      const e=$(id); if(!e) continue;
+      const def=v2FormDefaults[id];
+      if(e.type==='checkbox') e.checked=!!def;
+      else if(def) e.value=def;
+    }
+    return;
+  }
+  // A crafted permalink omits empty r (All Data) and i (auto). Only restore
+  // chart type when t was never in the hash, so a fallback like #mggoldUSDzcy
+  // is not left on "None". Persist an explicit None as tgnone via buildHash.
+  if(!v2ParsedHashIds.has('t')&&$('t')&&v2FormDefaults.t) $('t').value=v2FormDefaults.t;
+}
 function applyV2PermalinkDefaults(){
   if(typeof isV2Page!=='function'||!isV2Page()) return;
   const vt=($('vt')&&$('vt').value)||'';
   const cy=!!($('cy')&&$('cy').checked);
   if(!v2IsLong(vt,cy)) return;
   if($('c')&&$('c').checked) return;
-  if($('i')&&!$('i').value) $('i').value='Daily';
+  if(!v2ParsedHashIds.has('i')&&$('i')) $('i').value='Daily';
+  if(!v2ParsedHashIds.has('r')&&$('r')) $('r').value='';
 }
 function refreshV2DailyScoutStatus(rows){
   if(typeof isV2Page!=='function'||!isV2Page()) return;
@@ -264,6 +305,8 @@ function syncV2Ui(){
   Object.keys(cls).forEach(k=>document.body.classList.toggle(k,cls[k]));
   const lock=$('v2LockedMarket'); if(lock) lock.hidden=!locked;
   const note=$('v2DailyNote'); if(note) note.hidden=!usesWindowDaily;
+  const priceOpt=$('vt')&&$('vt').querySelector('option[value=""]');
+  if(priceOpt) priceOpt.textContent=cy?'Cycles':'Price chart';
   syncV2BtcOnlyControls(btc);
   v2LastMode={vt,cy};
 }
@@ -737,7 +780,6 @@ async function loadCompare(bars,m,cm){
 }
 async function draw(pushUrl){
   syncSeriesUi();
-  if(typeof applyV2PermalinkDefaults==='function') applyV2PermalinkDefaults();
   const hash=buildHash();
   const url=location.pathname+location.search+'#'+hash;
   if($('permalink'))$('permalink').value=location.origin+url;
@@ -2044,10 +2086,10 @@ $('larger').onclick=e=>{e.preventDefault();document.body.classList.toggle('wide'
 if(typeof isV2Page==='function'&&isV2Page()&&$('themeToggle')){
   $('themeToggle').onclick=()=>{applyTheme(!isDark());draw(1)};
 }
-window.onpopstate=()=>{if(isClassicPage()&&hashHasAdvanced(location.hash)){location.replace(pageHref('advanced', location.hash.slice(1)));return}parseHash(location.hash.slice(1));if($('sp')&&SCOUT_PRESETS[$('sp').value]&&currentMarket()!==SCOUT_PRESETS[$('sp').value].m)applyScoutPreset($('sp').value);initTheme();syncCustom();syncViewToggle();draw(0)};
+window.onpopstate=()=>{if(isClassicPage()&&hashHasAdvanced(location.hash)){location.replace(pageHref('advanced', location.hash.slice(1)));return}parseHash(location.hash.slice(1));if($('sp')&&SCOUT_PRESETS[$('sp').value]&&currentMarket()!==SCOUT_PRESETS[$('sp').value].m)applyScoutPreset($('sp').value);initTheme();syncCustom();syncViewToggle();if(typeof applyV2PermalinkDefaults==='function')applyV2PermalinkDefaults();draw(0)};
 // init: original defaults = 60 days, candlestick, MA 10/25 lengths, volume on
 if(isClassicPage()&&hashHasAdvanced(location.hash)){location.replace(pageHref('advanced', location.hash.slice(1)));}
-else{parseHash(location.hash.slice(1));if($('sp')&&SCOUT_PRESETS[$('sp').value]&&currentMarket()!==SCOUT_PRESETS[$('sp').value].m)applyScoutPreset($('sp').value);initTheme();syncCustom();syncViewToggle();draw(2);}
+else{parseHash(location.hash.slice(1));if($('sp')&&SCOUT_PRESETS[$('sp').value]&&currentMarket()!==SCOUT_PRESETS[$('sp').value].m)applyScoutPreset($('sp').value);initTheme();syncCustom();syncViewToggle();if(typeof applyV2PermalinkDefaults==='function')applyV2PermalinkDefaults();draw(2);}
 
 window.isDark=isDark;
 window.chartTheme=chartTheme;
