@@ -253,3 +253,105 @@ body.page-classic #scoutPresetBox,
 body.page-classic #ratioOpts{display:none !important}
 body.scout-view #scoutPresetBox,body.cycles-view #scoutPresetBox{display:inline}
 .chart-overlay{position:absolute;left:0;top:0;right:0;bottom:0;pointer-events:none;z-index:4}
+
+/* ---- v2 page only. Classic and Advanced are unchanged. ---- */
+body.page-v2 #chartoptions.v2-form{
+  display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-start;
+}
+body.page-v2 .v2-group{flex:1 1 210px;min-width:180px;max-width:100%}
+body.page-v2 .v2-group h6{margin:4px 0 6px}
+body.page-v2 .v2-group-body{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+body.page-v2 #v2LockedMarket{font-weight:bold;color:var(--fg)}
+body.page-v2 #v2DailyNote{color:var(--muted);font-weight:normal}
+
+body.page-v2:not(.v2-has-symbol) #v2SymbolBox{display:none !important}
+body.page-v2:not(.v2-has-compare) #compareBox{display:none !important}
+body.page-v2 #compareBox{margin-top:0;display:inline-flex;align-items:center;gap:6px}
+
+body.page-v2:not(.v2-has-window) #v2WindowGroup{display:none !important}
+body.page-v2:not(.v2-has-interval) #v2IntervalBox{display:none !important}
+
+body.page-v2:not(.v2-has-scale) #v2ScaleGroup{display:none !important}
+body.page-v2:not(.v2-has-loglog) #scaleToggle [data-scale="loglog"]{display:none !important}
+body.page-v2:not(.v2-has-pct) #scaleToggle [data-scale="pct"]{display:none !important}
+body.page-v2:not(.v2-has-dual) #scaleToggle [data-scale="dual"]{display:none !important}
+
+body.page-v2 #v2StyleGroup{display:none !important}
+body.page-v2.v2-has-style #v2StyleGroup,
+body.page-v2.v2-has-markers #v2StyleGroup,
+body.page-v2.v2-has-ratio #v2StyleGroup,
+body.page-v2.v2-has-ratio-log #v2StyleGroup,
+body.page-v2.v2-has-ann #v2StyleGroup{display:block !important}
+body.page-v2:not(.v2-has-style) #v2StyleGroup > h6,
+body.page-v2:not(.v2-has-style) #v2StyleGroup > .v2-group-body > label:not(#ratioBox):not(#ratioLogBox),
+body.page-v2:not(.v2-has-style) #v2StyleGroup .v2-ma,
+body.page-v2:not(.v2-has-style) #v2StyleGroup .v2-ind{display:none !important}
+body.page-v2:not(.v2-has-markers) #markerBox{display:none !important}
+body.page-v2:not(.v2-has-ratio) #ratioBox{display:none !important}
+body.page-v2:not(.v2-has-ratio-log) #ratioLogBox{display:none !important}
+body.page-v2.v2-has-ann #annBox{display:inline-flex !important}
+body.page-v2:not(.v2-has-ann) #annBox{display:none !important}
+
+body.page-v2:not(.v2-has-preset) #scoutPresetBox{display:none !important}
+body.page-v2.cycles-view #scoutViewBox{display:inline-flex !important}
+body.page-v2:not(.v2-has-shared-scale) #ratioOpts label:has(#ss){display:none !important}
+
+body.page-v2 #v2ViewOptsGroup{display:none}
+body.page-v2.cycles-view #v2ViewOptsGroup,
+body.page-v2.scout-view #v2ViewOptsGroup,
+body.page-v2.has-ratio-opts #v2ViewOptsGroup{display:block}
+
+body.page-v2 .submenu a.active{color:var(--link)}
+body.page-v2 #v2ScaleGroup{flex:2 1 360px;min-width:260px}
+body.page-v2 #scaleToggle{flex-wrap:wrap;max-width:100%}
+body.page-v2 #scaleToggle button{white-space:nowrap}
+
+
+@media (max-width:640px){
+  body.page-v2 #chartoptions.v2-form{flex-direction:column;gap:12px}
+  body.page-v2 .v2-group{flex:1 1 100%;min-width:0;width:100%}
+  body.page-v2 .v2-group-body{flex-direction:column;align-items:stretch}
+  body.page-v2 select,
+  body.page-v2 input[type="date"],
+  body.page-v2 input[type="text"],
+  body.page-v2 input[size]{max-width:none !important;width:100%;box-sizing:border-box}
+  body.page-v2 #CustomTimeBox input{width:100%}
+  body.page-v2 .seg{display:flex;flex-wrap:wrap;margin-right:0}
+  body.page-v2 .seg button,
+  body.page-v2 button,
+  body.page-v2 #SubmitButton,
+  body.page-v2 #themeToggle{min-height:44px;padding:8px 14px}
+  body.page-v2 #main,
+  body.page-v2 #main.cycles,
+  body.page-v2.scout-powerlaw #main,
+  body.page-v2.scout-drawdown #main,
+  body.page-v2.scout-ath #main,
+  body.page-v2.scout-sats #main,
+  body.page-v2.scout-pricema #main,
+  body.page-v2.scout-pricema.scout-osc #main,
+  body.page-v2.scout-returns #main,
+  body.page-v2.scout-powerlaw.scout-blend #main,
+  body.page-v2.scout-epoch #main,
+  body.page-v2.scout-calyear #main,
+  body.page-v2.scout-onthisday #main,
+  body.page-v2.scout-onthisday.has-otd-table #main,
+  body.page-v2.scout-hcycles #main,
+  body.page-v2.scout-spiral #main,
+  body.page-v2.scout-ranges #main{height:min(360px,70vh) !important}
+}
+
+/* v2: Cycles and Spiral stay available even if the hidden symbol is not Bitcoin. */
+body.page-v2.non-btc #viewToggle [data-cy="1"]{display:inline-block !important}
+body.page-v2.non-btc #vt option[value="spiral"]{display:block !important}
+
+@media (max-width:640px){
+  body.page-v2 .wrap{max-width:100%;box-sizing:border-box}
+  body.page-v2 #header .wrap, body.page-v2 .submenu, body.page-v2 .info,
+  body.page-v2 #chartoptions, body.page-v2 #content_chart{max-width:100%;min-width:0}
+  body.page-v2 #status{flex:1 1 100%;min-width:0;white-space:normal;margin-left:0}
+  body.page-v2 .seg{max-width:100%;box-sizing:border-box;flex-wrap:wrap}
+  body.page-v2 #cycleTable, body.page-v2 table.cycles, body.page-v2 #cycleLegend{
+    display:block;max-width:100%;overflow-x:auto;
+  }
+  body.page-v2 table.cycles{width:100%}
+}

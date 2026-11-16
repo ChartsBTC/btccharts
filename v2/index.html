@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Bitcoin Charts / v2</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Bitcoin Charts v2: the same Advanced charts with controls that only appear when they apply to the view.">
+<meta property="og:title" content="Bitcoin Charts — v2">
+<meta property="og:description" content="Bitcoin Charts v2: the same Advanced charts with controls that only appear when they apply to the view.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://chartsbtc.github.io/btccharts/v2/">
+<meta property="og:image" content="https://chartsbtc.github.io/btccharts/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:site_name" content="Bitcoin Charts">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Bitcoin Charts — v2">
+<meta name="twitter:description" content="Bitcoin Charts v2: the same Advanced charts with controls that only appear when they apply to the view.">
+<meta name="twitter:image" content="https://chartsbtc.github.io/btccharts/og-image.png">
+<link rel="canonical" href="https://chartsbtc.github.io/btccharts/v2/">
+<link rel="stylesheet" href="../vendor/uPlot.min.css"><link rel="stylesheet" href="../style.css"></head>
+<body class="page-v2">
+<script>window.CHART_PAGE="v2";</script>
+<div id="header"><div class="wrap"><a href="./" id="logo">Bitcoin Charts</a>
+<ul id="menu"><li><a class="active">Charts</a></li></ul>
+<span id="status" class="timestamp"></span>
+  <button type="button" id="themeToggle" title="Toggle dark mode">Dark</button></div></div>
+<div class="submenu wrap"><a href="../">Classic</a> · <a href="../advanced/">Advanced charts</a> · <a class="active" href="./">v2</a></div>
+<form id="chartoptions" class="wrap v2-form" onsubmit="return false">
+
+ <div class="v2-group" id="v2ViewGroup">
+  <h6>View</h6>
+  <div class="v2-group-body">
+    <span id="viewToggle" class="seg" role="group" aria-label="View"><button type="button" data-cy="0">Price</button><button type="button" data-cy="1">Cycles</button></span>
+    <label id="scoutViewBox"><select id="vt">
+      <option value="" selected>Price chart</option>
+      <option value="powerlaw">Power Law</option>
+      <option value="drawdown">Drawdown from ATH</option>
+      <option value="ath">ATHs and days between</option>
+      <option value="sats">Sats per dollar</option>
+      <option value="pricema">Price / MA</option>
+      <option value="returns">Rolling returns</option>
+      <option value="epoch">Halving-epoch candles</option>
+      <option value="calyear">Calendar year overlay</option>
+      <option value="onthisday">On this day</option>
+      <option value="hcycles">Halving cycles (USD)</option>
+      <option value="spiral">Bitcoin Spiral</option>
+      <option value="ranges">Days in price ranges</option>
+    </select></label>
+    <label id="scoutPresetBox">Chart Scout
+      <select id="sp">
+      <option value="" selected>None</option>
+      <option value="spxgold">S&amp;P 500 vs Gold</option>
+    </select>
+    </label>
+  </div>
+ </div>
+
+ <div class="v2-group" id="v2ViewOptsGroup">
+  <div class="v2-group-body">
+    <label id="cycleAlignBox" class="cycle-only">Align
+      <select id="ca">
+      <option value="low" selected>By cycle low</option>
+      <option value="high">By cycle high</option>
+      <option value="halving">By halving date</option>
+      <option value="calendar">4-year calendar (Jan 1)</option>
+    </select>
+    </label>
+    <label id="cyclePriceBox" class="cycle-only">Prices
+      <select id="cp">
+      <option value="usd" selected>Stacked (USD)</option>
+      <option value="low">Scaled: multiple of cycle low</option>
+      <option value="high">Scaled: % of cycle high</option>
+      <option value="day0">Scaled: relative to day 0</option>
+    </select>
+    </label>
+    <span id="ratioOpts" class="scout-opts">
+      <label>Ratio MA <select id="rma">
+      <option value="" selected>None</option>
+      <option value="1y">1 year</option>
+      <option value="5y">5 years</option>
+      <option value="10y">10 years</option>
+      <option value="20y">20 years</option>
+    </select></label>
+      <label><input type="checkbox" id="rme">Long-run mean</label>
+      <label><input type="checkbox" id="el">End labels</label>
+      <label><input type="checkbox" id="ss">Shared scale</label>
+    </span>
+    <span id="priceMaOpts" class="scout-opts" hidden>
+      <label>MA <select id="pma">
+      <option value="200d" selected>200-day</option>
+      <option value="100w">100-week</option>
+      <option value="200w">200-week</option>
+    </select></label>
+      <label>Style <select id="pmm">
+      <option value="panel" selected>Price + ratio</option>
+      <option value="osc">Percentile oscillator</option>
+    </select></label>
+    </span>
+    <span id="spiralOpts" class="scout-opts" hidden>
+      <label><input type="checkbox" id="sf">From 2011</label>
+      <label>Highlight <select id="sh">
+      <option value="current" selected>Current epoch</option>
+      <option value="off">None</option>
+    </select></label>
+    </span>
+    <span id="rangeOpts" class="scout-opts" hidden>
+      <label>Bands <select id="rb">
+      <option value="decade" selected>Orders of magnitude</option>
+      <option value="pow2">Powers of 2</option>
+    </select></label>
+    </span>
+    <span id="otdOpts" class="scout-opts" hidden>
+      <label>On
+        <select id="otdMonth"><option value="1">January</option><option value="2">February</option><option value="3">March</option><option value="4">April</option><option value="5">May</option><option value="6">June</option><option value="7">July</option><option value="8">August</option><option value="9">September</option><option value="10">October</option><option value="11">November</option><option value="12">December</option></select>
+        <select id="otdDay"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option><option value="24">24</option><option value="25">25</option><option value="26">26</option><option value="27">27</option><option value="28">28</option><option value="29">29</option><option value="30">30</option><option value="31">31</option></select>
+      </label>
+      <input type="hidden" id="otd">
+      <label><input type="checkbox" id="ott">4/8/12-year ROI &amp; CAGR</label>
+    </span>
+    <span id="yearOpts" class="scout-opts" hidden>
+      <label>Mode <select id="ym">
+      <option value="raw" selected>Raw USD (linear)</option>
+      <option value="idx">Indexed to current Jan 1 (log)</option>
+    </select></label>
+    </span>
+    <span id="returnsOpts" class="scout-opts" hidden>
+      <label>Metric <select id="rm">
+      <option value="cagr" selected>N-year CAGR</option>
+      <option value="roi">N-year ROI</option>
+      <option value="mult">1-year multiple</option>
+    </select></label>
+      <label id="rnBox">N <select id="rn">
+      <option value="1">1 year</option>
+      <option value="2">2 years</option>
+      <option value="4" selected>4 years</option>
+      <option value="8">8 years</option>
+    </select></label>
+      <label><input type="checkbox" id="rcl" checked>Cycle labels</label>
+    </span>
+    <span id="blendOpts" class="scout-opts" hidden>
+      <label><input type="checkbox" id="blp">Blended percentile</label>
+      <label id="blwBox">Ratio weight <input id="blw" type="range" min="0" max="100" value="50" step="5"> <span id="blwVal">50</span>%</label>
+    </span>
+    <span id="pctBandOpts" class="scout-opts" hidden>
+      <label>Percentiles <input id="pb" size="20" value="1, 5, 20, 50, 80, 95, 99" title="Comma-separated percentiles of the displayed ratio"></label>
+      <label><input type="checkbox" id="pbp">Show bands on price</label>
+    </span>
+  </div>
+ </div>
+
+ <div class="v2-group" id="v2SeriesGroup">
+  <h6>Series</h6>
+  <div class="v2-group-body">
+    <label id="v2SymbolBox">Symbol
+      <select id="m">
+    <option value="combinedUSD" selected>Combined history</option>
+    <optgroup label="USD">
+      <option value="coinbaseUSD">Coinbase (USD)</option>
+      <option value="bitstampUSD">Bitstamp (USD)</option>
+      <option value="mtgoxUSD">Mt. Gox (USD)</option>
+    </optgroup>
+  </select>
+    </label>
+    <span id="v2LockedMarket" hidden>Combined daily history</span>
+    <label id="compareBox">Compare to
+      <select id="cm"><option value="" selected>None</option></select>
+    </label>
+  </div>
+ </div>
+
+ <div class="v2-group" id="v2WindowGroup">
+  <h6>Window</h6>
+  <div class="v2-group-body">
+    <label>Time Period
+      <select id="r">
+   <option value="1">1 day</option><option value="2">2 days</option><option value="5">5 days</option><option value="10">10 days</option>
+   <option value="30">1 month</option><option value="60" selected>2 months</option><option value="90">3 months</option><option value="120">4 months</option>
+   <option value="150">5 months</option><option value="180">6 months</option><option value="360">1 year</option><option value="730">2 years</option>
+   <option value="1460">4 years</option><option value="2920">8 years</option><option value="">All Data</option>
+   <optgroup label="Cycles">
+    <option value="c2011">Cycle 2011</option>
+    <option value="c2013">Cycle 2013</option>
+    <option value="c2017">Cycle 2017</option>
+    <option value="c2021">Cycle 2021</option>
+    <option value="ccurrent">Current cycle</option>
+   </optgroup></select>
+    </label>
+    <label id="v2IntervalBox">Interval <select id="i"><option value="">auto</option><option>1-min</option><option>5-min</option><option>15-min</option><option>30-min</option>
+   <option>Hourly</option><option>2-hour</option><option>3-hour</option><option>6-hour</option><option>12-hour</option><option>Daily</option><option>Weekly</option><option>Monthly</option><option>Quarterly</option><option>Yearly</option><option value="Cycle">4-Year Cycle</option></select></label>
+    <span id="v2DailyNote" hidden>Daily data</span>
+    <label><input type="checkbox" id="c">Custom Time</label>
+    <div id="CustomTimeBox"><input id="s" type="date"> — <input id="e" type="date">
+      <button type="button" id="Prev">&lt;</button> day <button type="button" id="Next">&gt;</button>
+    </div>
+  </div>
+ </div>
+
+ <div class="v2-group" id="v2ScaleGroup">
+  <h6>Scale</h6>
+  <div class="v2-group-body">
+    <span id="scaleToggle" class="seg" role="group" aria-label="Price scale">
+      <button type="button" data-scale="linear">Linear</button>
+      <button type="button" data-scale="log">Log</button>
+      <button type="button" data-scale="loglog">Log-Log</button>
+      <button type="button" data-scale="pct">Percentage</button>
+      <button type="button" data-scale="dual">Dual axis</button>
+    </span>
+    <input type="checkbox" id="l" hidden>
+    <input type="checkbox" id="p" hidden>
+    <input type="checkbox" id="da" hidden>
+  </div>
+ </div>
+
+ <div class="v2-group" id="v2StyleGroup">
+  <h6>Style and overlays</h6>
+  <div class="v2-group-body">
+    <label>Chart Type <select id="t"><option value="">None</option><option value="S" selected>CandleStick</option><option value="C">Closing Price</option>
+   <option value="M">Median Price</option><option value="O">OHLC</option><option value="T">Typical Price</option><option value="W">Weighted Close</option></select></label>
+    <label>Price Band <select id="b"><option value="">None</option><option value="B">Bollinger Band</option><option value="D">Donchian Channel</option><option value="E">Envelope (SMA 20 +/- 10%)</option></select></label>
+    <label><input type="checkbox" id="v" checked>Show Volume Bars</label>
+    <label><input type="checkbox" id="cv">Volume in Currency</label>
+    <span class="v2-ma">
+      <span class="v2-ma-label">Moving Averages</span>
+      <select id="a1"><option value="">None</option><option value="SMA">Simple</option><option value="EMA">Exponential</option><option value="TMA">Triangular</option><option value="WMA">Weighted</option></select> <input id="m1" size="3" value="10">
+      <select id="a2"><option value="">None</option><option value="SMA">Simple</option><option value="EMA">Exponential</option><option value="TMA">Triangular</option><option value="WMA">Weighted</option></select> <input id="m2" size="3" value="25">
+    </span>
+    <span class="v2-ind">
+      <span class="v2-ma-label">Technical Indicators</span>
+      <label><input type="checkbox" id="x">large indicators</label>
+      <select id="i1" class="ind"></select> <select id="i2" class="ind"></select> <select id="i3" class="ind"></select> <select id="i4" class="ind"></select>
+    </span>
+    <span id="markerBox">
+      <label><input type="checkbox" id="ch">Cycle highs</label>
+      <label><input type="checkbox" id="cl">Cycle lows</label>
+      <label><input type="checkbox" id="hv">Halvings</label>
+      <label><input type="checkbox" id="pl">Power Law</label>
+      <label><input type="checkbox" id="ep">Color by epoch</label>
+    </span>
+    <label id="ratioBox">Ratio panel
+      <select id="rp">
+      <option value="" selected>None</option>
+      <option value="mayer">Mayer Multiple</option>
+      <option value="a1">Price / MA 1</option>
+      <option value="a2">Price / MA 2</option>
+      <option value="pl">Price / Power Law</option>
+    </select>
+    </label>
+    <label id="ratioLogBox"><input type="checkbox" id="rpl">Log ratio</label>
+    <span id="annBox" class="scout-opts">
+      <label>Flat span
+        <input type="date" id="annStart">
+        →
+        <input type="date" id="annEnd">
+        <button type="button" id="annAdd">Add</button>
+      </label>
+      <input type="hidden" id="an">
+      <span id="annList"></span>
+    </span>
+  </div>
+ </div>
+
+ <input type="checkbox" id="cy" hidden>
+ <input type="checkbox" id="ll" hidden>
+</form>
+<div id="content_chart" class="wrap">
+ <div class="info v2-actions">
+  <input id="SubmitButton" type="button" value="Draw">
+  <a href="#" id="getPermalink">Link to this chart</a> · <a href="#" id="copyImage">Copy image</a> · <span class="share-wrap"><a href="#" id="postToX" aria-haspopup="true" aria-expanded="false">Post to X</a><div id="shareMenu" hidden role="menu"><button type="button" role="menuitem" data-share="link">Post link</button><button type="button" role="menuitem" data-share="image">Post image</button></div></span> · <a href="#" id="downloadPng">Download PNG</a> · <a href="#" id="larger">Larger chart</a> <span id="copyStatus" hidden></span>
+  <span id="legend"></span>
+ </div>
+ <div id="cycleLegend" class="cycle-only"></div>
+ <div id="plLegend" hidden></div>
+ <div id="epochLegend" hidden></div>
+ <div id="permalinkbox" hidden>Use this link to bookmark or share this chart. Select "Custom Time" for a permanent link to a specific date.<br><input id="permalink" readonly></div>
+ <div id="charts"><div id="chartStage"><div id="main"></div><div id="chartWatermark" aria-hidden="true">chartsbtc.github.io/btccharts</div></div><div id="subs"></div></div>
+ <div id="cycleTable" class="cycle-only"></div>
+ <p class="small" id="sourceNote">Daily history cached locally.</p>
+ <p id="dataActions"><a href="#" id="loadRaw">Show data</a> · <a href="#" id="downloadCsv" hidden>Download CSV</a></p>
+ <div id="tableWrap" hidden><table class="data" id="chart_table"><thead></thead><tbody></tbody></table></div>
+</div>
+<script src="../vendor/lightweight-charts.js"></script>
+<script src="../vendor/uPlot.iife.min.js"></script>
+<script src="../indicators.js"></script>
+<script src="../cycles.js"></script>
+<script src="../scout.js"></script>
+<script src="../data.js"></script>
+<script src="../app.js"></script>
+</body></html>

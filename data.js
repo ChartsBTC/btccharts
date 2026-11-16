@@ -27,7 +27,7 @@ function isBtcMarket(m){return !!(MARKETS[m]&&MARKETS[m].kind!=='macro')}
 function shortMarketLabel(m){return (MARKETS[m]&&MARKETS[m].short)||marketLabel(m)}
 function currentCompare(){const cm=document.getElementById('cm')?.value;if(!cm||!MARKETS[cm]||cm===currentMarket())return '';return cm}
 function dailyUrl(market){
-  const root=(window.CHART_PAGE==='advanced')?'../data/':'data/';
+  const root=(window.CHART_PAGE==='advanced'||window.CHART_PAGE==='v2')?'../data/':'data/';
   return root+(isMacroMarket(market)?'macro/':'')+market+'.json';
 }
 function isMonthlySeries(srcRows){
