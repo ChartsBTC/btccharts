@@ -302,9 +302,10 @@ body.page-v2.scout-view #v2ViewOptsGroup,
 body.page-v2.has-ratio-opts #v2ViewOptsGroup{display:block}
 
 body.page-v2 .submenu a.active{color:var(--link)}
-body.page-v2 #v2ScaleGroup{flex:2 1 360px;min-width:260px}
+body.page-v2 #v2ScaleGroup{flex:1 0 100%;width:100%;min-width:0;max-width:100%}
 body.page-v2 #scaleToggle{flex-wrap:wrap;max-width:100%}
 body.page-v2 #scaleToggle button{white-space:nowrap}
+body.page-v2 #viewToggle button:disabled{opacity:.45;cursor:not-allowed}
 
 
 @media (max-width:640px){
@@ -340,7 +341,7 @@ body.page-v2 #scaleToggle button{white-space:nowrap}
   body.page-v2.scout-ranges #main{height:min(360px,70vh) !important}
 }
 
-/* v2: Cycles and Spiral stay available even if the hidden symbol is not Bitcoin. */
+/* v2: keep Cycles and Spiral visible but disabled (with a tooltip) when the symbol is not Bitcoin. */
 body.page-v2.non-btc #viewToggle [data-cy="1"]{display:inline-block !important}
 body.page-v2.non-btc #vt option[value="spiral"]{display:block !important}
 
@@ -350,8 +351,8 @@ body.page-v2.non-btc #vt option[value="spiral"]{display:block !important}
   body.page-v2 #chartoptions, body.page-v2 #content_chart{max-width:100%;min-width:0}
   body.page-v2 #status{flex:1 1 100%;min-width:0;white-space:normal;margin-left:0}
   body.page-v2 .seg{max-width:100%;box-sizing:border-box;flex-wrap:wrap}
-  body.page-v2 #cycleTable, body.page-v2 table.cycles, body.page-v2 #cycleLegend{
+  body.page-v2.cycles-view #cycleTable, body.page-v2.cycles-view table.cycles, body.page-v2.cycles-view #cycleLegend{
     display:block;max-width:100%;overflow-x:auto;
   }
-  body.page-v2 table.cycles{width:100%}
+  body.page-v2.cycles-view table.cycles{width:100%}
 }

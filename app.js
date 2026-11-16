@@ -104,21 +104,11 @@ function syncSeriesUi(){
   document.body.classList.toggle('non-btc',!btc);
   document.body.classList.toggle('compare-on',!!cmp);
   if(!btc){
-    const v2=typeof isV2Page==='function'&&isV2Page();
-    const vtNow=($('vt')&&$('vt').value)||'';
-    const cyNow=!!($('cy')&&$('cy').checked);
-    const v2Locked=v2&&(cyNow||vtNow==='spiral');
-    if(!v2Locked){
-      ['cy','ll','pl','ep','ch','cl','hv'].forEach(id=>{const e=$(id);if(e&&e.type==='checkbox')e.checked=false});
-      if($('vt')&&BTC_ONLY_VIEWS.includes($('vt').value))$('vt').value='';
-    }else{
-      ['ll','pl','ep','ch','cl','hv'].forEach(id=>{const e=$(id);if(e&&e.type==='checkbox')e.checked=false});
-    }
-    if(!v2Locked){
-      if($('rp')&&($('rp').value==='mayer'||$('rp').value==='pl'))$('rp').value='';
-      if($('r')&&typeof isCyclePreset==='function'&&isCyclePreset($('r').value)){$('r').value='';$('c').checked=false;}
-      if($('i')&&$('i').value==='Cycle')$('i').value='Daily';
-    }
+    ['cy','ll','pl','ep','ch','cl','hv'].forEach(id=>{const e=$(id);if(e&&e.type==='checkbox')e.checked=false});
+    if($('vt')&&BTC_ONLY_VIEWS.includes($('vt').value))$('vt').value='';
+    if($('rp')&&($('rp').value==='mayer'||$('rp').value==='pl'))$('rp').value='';
+    if($('r')&&typeof isCyclePreset==='function'&&isCyclePreset($('r').value)){$('r').value='';$('c').checked=false;}
+    if($('i')&&$('i').value==='Cycle')$('i').value='Daily';
   }
   if(cmp){
     if($('da'))$('da').checked=false;
@@ -194,6 +184,38 @@ function applyV2ViewDefaults(prevVt, prevCy, nextVt, nextCy){
     if(typeof syncCustom==='function') syncCustom();
   }
 }
+function applyV2PermalinkDefaults(){
+  if(typeof isV2Page!=='function'||!isV2Page()) return;
+  const vt=($('vt')&&$('vt').value)||'';
+  const cy=!!($('cy')&&$('cy').checked);
+  if(!v2IsLong(vt,cy)) return;
+  if($('c')&&$('c').checked) return;
+  if($('i')&&!$('i').value) $('i').value='Daily';
+}
+function refreshV2DailyScoutStatus(rows){
+  if(typeof isV2Page!=='function'||!isV2Page()) return;
+  const vt=($('vt')&&$('vt').value)||'';
+  if(!(vt==='pricema'||vt==='returns'||vt==='epoch')) return;
+  const scout=window.lastScout||{};
+  if(scout.kind&&scout.kind!==vt) return;
+  const list=rows&&rows.length?rows:(scout.shown||null);
+  if(!list||!list.length) return;
+  const last=list.at(-1);
+  const close=last&&(last.close!=null?last.close:last.value);
+  if(!(close>0)) return;
+  const m=typeof currentMarket==='function'?currentMarket():'combinedUSD';
+  const lastTxt=typeof formatLastPrice==='function'?formatLastPrice(close,m):close;
+  status(list.length+' Daily bars · '+marketLabel(m)+' · last '+lastTxt);
+}
+function syncV2BtcOnlyControls(btc){
+  if(typeof isV2Page!=='function'||!isV2Page()) return;
+  const tip=btc?'':'BTC only';
+  const cyBtn=document.querySelector('#viewToggle [data-cy="1"]');
+  if(cyBtn){cyBtn.disabled=!btc;cyBtn.title=tip;cyBtn.setAttribute('aria-disabled',btc?'false':'true')}
+  const opt=$('vt')&&$('vt').querySelector('option[value="spiral"]');
+  if(opt){opt.disabled=!btc;opt.title=tip}
+}
+
 function syncV2Ui(){
   if(typeof isV2Page!=='function'||!isV2Page()) return;
   const vt=($('vt')&&$('vt').value)||'';
@@ -242,6 +264,7 @@ function syncV2Ui(){
   Object.keys(cls).forEach(k=>document.body.classList.toggle(k,cls[k]));
   const lock=$('v2LockedMarket'); if(lock) lock.hidden=!locked;
   const note=$('v2DailyNote'); if(note) note.hidden=!usesWindowDaily;
+  syncV2BtcOnlyControls(btc);
   v2LastMode={vt,cy};
 }
 
@@ -714,6 +737,7 @@ async function loadCompare(bars,m,cm){
 }
 async function draw(pushUrl){
   syncSeriesUi();
+  if(typeof applyV2PermalinkDefaults==='function') applyV2PermalinkDefaults();
   const hash=buildHash();
   const url=location.pathname+location.search+'#'+hash;
   if($('permalink'))$('permalink').value=location.origin+url;
@@ -766,7 +790,9 @@ async function draw(pushUrl){
     note.textContent=src;
   }
   if(typeof scoutView==='function'&&scoutView()){
-    if(await renderScout(scoutView())){if(tableOpen)showTable();else clear_table();return}
+    if(await renderScout(scoutView())){
+      if(typeof refreshV2DailyScoutStatus==='function') refreshV2DailyScoutStatus();
+      if(tableOpen)showTable();else clear_table();return}
   }
   const marks=await priceEventMarkers();
   render(interval,marks);if(tableOpen)showTable();else clear_table();
@@ -1957,7 +1983,7 @@ document.querySelectorAll('#scaleToggle button').forEach(b=>b.onclick=()=>{
   else if(mode==='log'){$('ll').checked=false;$('l').checked=true;$('p').checked=false;if(v2&&$('da'))$('da').checked=false}
   else {$('ll').checked=false;$('l').checked=false;$('p').checked=false;if(v2&&$('da'))$('da').checked=false}
   draw(1)});
-document.querySelectorAll('#viewToggle button').forEach(b=>b.onclick=()=>{const want=b.dataset.cy==='1';
+document.querySelectorAll('#viewToggle button').forEach(b=>b.onclick=()=>{if(b.disabled)return;const want=b.dataset.cy==='1';
   const prevVt=($('vt')&&$('vt').value)||'', prevCy=!!($('cy')&&$('cy').checked);
   if($('vt')) $('vt').value='';
   if($('cy').checked===want && !want){
