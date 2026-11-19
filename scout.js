@@ -1011,7 +1011,10 @@ async function composeScoutImage(){
     ctx.fillStyle=th.exportTitle; ctx.font=titleSize+'px Verdana,Arial,sans-serif'; ctx.textBaseline='top';
     ctx.fillText(chartTitleLine(),pad,pad);
     ctx.drawImage(src,0,pad+titleH);
-    paintWatermark(ctx,0,pad+titleH,src.width,src.height,dpr,{});
+    // 200w never-down already paints the watermark on the main panel.
+    if(!(window.lastScout&&window.lastScout.kind==='200wnevrdown')){
+      paintWatermark(ctx,0,pad+titleH,src.width,src.height,dpr,{});
+    }
     return canvas;
   }
   if(!scoutPlots.length) return null;
@@ -1057,7 +1060,14 @@ async function renderScout(kind){
   if(kind==='hcycles'){await renderHcyclesView();return true}
   if(kind==='spiral'){await renderSpiralView();return true}
   if(kind==='ranges'){await renderRangesView();return true}
-  if(kind==='annualreturns'){await renderAnnualReturnsView();return true}
+  if(kind==='annualreturns'){
+    if(typeof isV2Page==='function'&&!isV2Page()) return false;
+    await renderAnnualReturnsView();return true
+  }
+  if(kind==='200wnevrdown'){
+    if(typeof isV2Page==='function'&&!isV2Page()) return false;
+    await renderNeverDownView();return true
+  }
   return false;
 }
 
@@ -3310,3 +3320,306 @@ window.computeAnnualReturns=computeAnnualReturns;
 window.composeAnnualReturnsImage=composeAnnualReturnsImage;
 window.formatAnnualPrice=formatAnnualPrice;
 window.formatAnnualPct=formatAnnualPct;
+
+const NEVERDOWN_ASSETS=[
+  {id:'BTC',name:'Bitcoin',color:'#ef6c00'},
+  {id:'QQQ',name:'QQQ',color:'#7b1fa2'},
+  {id:'SPY',name:'SPY',color:'#1565c0'},
+  {id:'GLD',name:'GLD',color:'#c9a017'},
+  {id:'AGG',name:'AGG',color:'#2e7d32'},
+  {id:'TLT',name:'TLT',color:'#6d4c41'},
+];
+const NEVERDOWN_TICKS=[1,2,5,10,20,50,100,200,500];
+let etfWeeklyCache=null;
+async function loadEtfWeekly(){
+  if(etfWeeklyCache) return etfWeeklyCache;
+  const root=(window.CHART_PAGE==='advanced'||window.CHART_PAGE==='v2')?'../data/':'data/';
+  const r=await fetch(root+'macro/etf_weekly.json',{cache:'no-cache'});
+  if(!r.ok) throw new Error('Failed to load weekly ETF cache ('+r.status+')');
+  etfWeeklyCache=await r.json();
+  return etfWeeklyCache;
+}
+function btcSundayCloses(daily){
+  const out=[];
+  for(const b of daily||[]){
+    if(!b||!(b.close>0)||b.time==null) continue;
+    const d=new Date(b.time*1000);
+    if(d.getUTCDay()!==0) continue;
+    out.push({time:b.time,close:b.close});
+  }
+  return out;
+}
+function sma200Of(closes){
+  const out=[];
+  if(!closes||closes.length<200) return out;
+  let sum=0;
+  for(let i=0;i<closes.length;i++){
+    sum+=closes[i].close;
+    if(i>=200) sum-=closes[i-200].close;
+    if(i>=199) out.push({time:closes[i].time,sma:sum/200});
+  }
+  return out;
+}
+function isoWeek(t){
+  return (typeof isoUTC==='function'?isoUTC(t):new Date(t*1000).toISOString().slice(0,10));
+}
+function computeNeverDown(btcDaily, etfJson){
+  const btcW=btcSundayCloses(btcDaily);
+  const btcSma=sma200Of(btcW);
+  if(!btcSma.length) return {error:'Not enough Bitcoin Sunday closes for a 200-week average.'};
+  const anchor=btcSma[0];
+  const series={};
+  series.BTC={id:'BTC',name:'Bitcoin',color:'#ef6c00',sma:btcSma,base:anchor.sma};
+  const missing=[];
+  for(const a of NEVERDOWN_ASSETS){
+    if(a.id==='BTC') continue;
+    const pack=etfJson&&etfJson.series&&etfJson.series[a.id];
+    const closes=(pack&&pack.closes||[]).map(r=>({time:r[0],close:r[1]})).filter(p=>p.close>0);
+    const sma=sma200Of(closes);
+    if(!sma.length){missing.push(a.id);continue}
+    const at=sma.find(p=>p.time===anchor.time)||sma.find(p=>p.time>=anchor.time);
+    if(!at||!(at.sma>0)){missing.push(a.id);continue}
+    series[a.id]={id:a.id,name:a.name,color:a.color,sma:sma,base:at.sma};
+  }
+  const startT=anchor.time;
+  let endT=anchor.time;
+  Object.values(series).forEach(s=>{if(s.sma.length) endT=Math.max(endT,s.sma.at(-1).time)});
+  const assets=NEVERDOWN_ASSETS.map(a=>series[a.id]).filter(Boolean);
+  const packed=assets.map(s=>{
+    const by=new Map(s.sma.filter(p=>p.time>=startT).map(p=>[p.time,p.sma]));
+    const times=[...by.keys()].sort((x,y)=>x-y);
+    const pts=times.map((t,i)=>{
+      const sma=by.get(t);
+      const prev=i?by.get(times[i-1]):null;
+      const indexed=sma/s.base;
+      const down=prev!=null&&sma<prev;
+      return {time:t,sma,indexed,down};
+    });
+    let downs=0, streak=0;
+    for(let i=0;i<pts.length;i++) if(pts[i].down) downs++;
+    for(let i=pts.length-1;i>=1;i--){
+      if(pts[i].indexed>pts[i-1].indexed) streak++;
+      else break;
+    }
+    const last=pts.at(-1);
+    return {id:s.id,name:s.name,color:s.color,base:s.base,pts,downs,streak,last};
+  });
+  const btc=packed.find(s=>s.id==='BTC');
+  return {anchor, startT, endT, assets:packed, missing, btc, source:etfJson&&(etfJson.source||''), asOf:etfJson&&etfJson.asOf};
+}
+function formatMult(v){
+  if(!(v>0)) return '';
+  if(v>=100) return (Math.round(v*10)/10).toFixed(v>=100&&v%1<0.05?0:1).replace(/\.0$/,'')+'x';
+  return v.toFixed(1)+'x';
+}
+function paintNeverDown(ctx,w,h,pack){
+  const th=typeof T==='function'?T():{bg:'#fff',text:'#333',grid:'#eee',border:'#ccc',muted:'#666',title:'#222'};
+  const dark=typeof isDark==='function'&&isDark();
+  ctx.fillStyle=th.bg; ctx.fillRect(0,0,w,h);
+  const assets=pack.assets||[];
+  if(!assets.length) return;
+  const calloutH=24, axisTitleH=16, stripH=22, stripGap=4, nStrips=assets.length;
+  const stripsBlock=nStrips*(stripH+stripGap)-stripGap;
+  const creditH=28, padL=58, padR=86, padB=26;
+  const mainTop=calloutH+axisTitleH;
+  const mainH=h-mainTop-padB-stripsBlock-creditH;
+  const plotW=w-padL-padR;
+  if(plotW<80||mainH<80) return;
+
+  const btc=pack.btc;
+  const streak=btc?btc.streak:0;
+  ctx.fillStyle=th.title||th.text;
+  ctx.textAlign='left'; ctx.textBaseline='middle';
+  const callout="Bitcoin's 200-week average has risen "+streak+" week"+(streak===1?'':'s')+" in a row";
+  let calloutSize=14;
+  ctx.font='bold '+calloutSize+'px Verdana,Arial,sans-serif';
+  while(calloutSize>11 && ctx.measureText(callout).width>w-16){
+    calloutSize--; ctx.font='bold '+calloutSize+'px Verdana,Arial,sans-serif';
+  }
+  ctx.fillText(callout, 8, calloutH/2);
+  ctx.fillStyle=th.muted||th.text;
+  ctx.font='10px Verdana,Arial,sans-serif';
+  ctx.textAlign='left'; ctx.textBaseline='bottom';
+  ctx.fillText('200-week avg, indexed (May 2014 = 1x)', padL, mainTop-4);
+
+  const allV=[];
+  assets.forEach(s=>s.pts.forEach(p=>{if(p.indexed>0) allV.push(p.indexed)}));
+  const vmin=1, vmax=Math.max(500, Math.max(...allV)*1.15);
+  const yOf=v=>{
+    const lo=Math.log10(vmin), hi=Math.log10(vmax);
+    return mainTop+mainH*(1-(Math.log10(Math.max(v,vmin*0.5))-lo)/(hi-lo));
+  };
+  const t0=pack.startT, t1=pack.endT;
+  const xOf=t=>padL+plotW*((t-t0)/Math.max(1,t1-t0));
+
+  ctx.font='10px Verdana,Arial,sans-serif';
+  ctx.textAlign='right'; ctx.textBaseline='middle';
+  ctx.strokeStyle=th.grid; ctx.lineWidth=1;
+  for(const tick of NEVERDOWN_TICKS){
+    if(tick<vmin||tick>vmax) continue;
+    const y=yOf(tick);
+    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(padL+plotW,y); ctx.stroke();
+    ctx.fillStyle=th.muted||th.text;
+    ctx.fillText(tick+'x', padL-6, y);
+  }
+  ctx.strokeStyle=th.border; ctx.strokeRect(padL,mainTop,plotW,mainH);
+  // year ticks (skip odd years on narrow canvases so labels don't collide)
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.fillStyle=th.muted||th.text;
+  const y0=new Date(t0*1000).getUTCFullYear();
+  const y1=new Date(t1*1000).getUTCFullYear();
+  const yearStep=plotW<480?2:1;
+  for(let y=y0;y<=y1;y++){
+    const t=Date.UTC(y,0,1)/1000;
+    if(t<t0-20*86400||t>t1+20*86400) continue;
+    if(t>=t0&&t<=t1){
+      const x=xOf(t);
+      ctx.strokeStyle=th.grid;
+      ctx.beginPath(); ctx.moveTo(x,mainTop); ctx.lineTo(x,mainTop+mainH); ctx.stroke();
+    }
+    if((y-y0)%yearStep) continue;
+    const x=xOf(Math.max(t0, Math.min(t1,t)));
+    ctx.fillStyle=th.muted||th.text;
+    ctx.fillText(String(y), x, mainTop+mainH+6);
+  }
+
+  // lines: normal, then red down segments on top
+  assets.forEach(s=>{
+    const pts=s.pts;
+    if(pts.length<2) return;
+    ctx.lineJoin='round'; ctx.lineCap='round';
+    ctx.strokeStyle=s.color; ctx.lineWidth=1.8;
+    ctx.beginPath();
+    pts.forEach((p,i)=>{const x=xOf(p.time), y=yOf(p.indexed); if(i) ctx.lineTo(x,y); else ctx.moveTo(x,y)});
+    ctx.stroke();
+    ctx.strokeStyle='#c62828'; ctx.lineWidth=3.2;
+    let run=false;
+    pts.forEach((p,i)=>{
+      if(!i) return;
+      const x0=xOf(pts[i-1].time), y0=yOf(pts[i-1].indexed);
+      const x1=xOf(p.time), y1=yOf(p.indexed);
+      if(p.down){
+        if(!run){ctx.beginPath(); ctx.moveTo(x0,y0); run=true}
+        ctx.lineTo(x1,y1);
+      }else if(run){ctx.stroke(); run=false}
+    });
+    if(run) ctx.stroke();
+  });
+
+  // end labels, stacked if needed
+  const labels=assets.map(s=>{
+    const last=s.last; if(!last) return null;
+    return {s, text:s.name+' '+formatMult(last.indexed), y:yOf(last.indexed), color:s.color};
+  }).filter(Boolean).sort((a,b)=>a.y-b.y);
+  ctx.font='bold 11px Verdana,Arial,sans-serif';
+  ctx.textAlign='left'; ctx.textBaseline='middle';
+  const minGap=16, yLo=mainTop+8, yHi=mainTop+mainH-8;
+  let lastY=yLo-minGap;
+  labels.forEach(lab=>{
+    let y=Math.max(yLo, Math.min(yHi, lab.y));
+    if(y-lastY<minGap) y=lastY+minGap;
+    lastY=y;
+    const x=padL+plotW+6;
+    ctx.lineWidth=3;
+    ctx.strokeStyle=dark?'rgba(0,0,0,0.75)':'rgba(255,255,255,0.9)';
+    ctx.fillStyle=lab.color;
+    ctx.strokeText(lab.text, x, y);
+    ctx.fillText(lab.text, x, y);
+  });
+
+  // strips
+  const stripTop=mainTop+mainH+padB;
+  const lastTimes=new Map();
+  assets.forEach((s,i)=>{
+    const y=stripTop+i*(stripH+stripGap);
+    ctx.fillStyle=dark?'#1a1a1a':'#f7f7f7';
+    ctx.fillRect(padL,y,plotW,stripH);
+    ctx.strokeStyle=th.border; ctx.lineWidth=1;
+    ctx.strokeRect(padL,y,plotW,stripH);
+    const slot=plotW/Math.max(1,s.pts.length);
+    ctx.fillStyle='#c62828';
+    s.pts.forEach((p,idx)=>{
+      if(!p.down) return;
+      const x=xOf(p.time);
+      const bw=Math.max(1.2, slot*0.8);
+      ctx.fillRect(x-bw/2, y+2, bw, stripH-4);
+    });
+    ctx.fillStyle=s.color;
+    ctx.font='bold 10px Verdana,Arial,sans-serif';
+    ctx.textAlign='right'; ctx.textBaseline='middle';
+    ctx.fillText(s.name, padL-6, y+stripH/2);
+    ctx.fillStyle=th.text;
+    ctx.font='11px Verdana,Arial,sans-serif';
+    ctx.textAlign='left';
+    ctx.fillText(String(s.downs), padL+plotW+6, y+stripH/2);
+  });
+
+  // watermark in the open upper-left of the main plot (lines all start near 1x)
+  const wm=typeof WATERMARK_TEXT==='string'?WATERMARK_TEXT:'chartsbtc.github.io/btccharts';
+  ctx.save();
+  ctx.font='12px Verdana,Arial,sans-serif';
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  const wmx=padL+10, wmy=mainTop+12;
+  ctx.lineWidth=3;
+  ctx.strokeStyle=dark?'rgba(0,0,0,0.75)':'rgba(255,255,255,0.85)';
+  ctx.strokeText(wm, wmx, wmy);
+  ctx.fillStyle=dark?'rgba(255,255,255,0.45)':'rgba(0,0,0,0.28)';
+  ctx.fillText(wm, wmx, wmy);
+  ctx.restore();
+
+  ctx.fillStyle=th.muted||th.text;
+  ctx.font='10px Verdana,Arial,sans-serif';
+  ctx.textAlign='left'; ctx.textBaseline='middle';
+  const creditY=stripTop+stripsBlock+creditH/2;
+  ctx.fillText('Chart idea: @dotkrueger  ·  down-week counts on the right', padL, creditY);
+}
+
+async function renderNeverDownView(){
+  clearCharts();
+  document.body.classList.add('scout-view','scout-neverdown');
+  $('charts').classList.remove('has-volume');
+  const main=$('main');
+  main.innerHTML='';
+  $('subs').innerHTML='';
+  if(typeof setEpochLegend==='function') setEpochLegend(false);
+  let daily=[], etf=null, etfErr=null;
+  try{daily=await getDaily('combinedUSD'); daily=daily.map(toBar).filter(b=>b&&b.close>0)}
+  catch(e){status('Error loading Bitcoin history: '+e.message);return}
+  try{etf=await loadEtfWeekly()}
+  catch(e){etfErr=e.message; console.warn(e)}
+  const pack=computeNeverDown(daily, etf);
+  if(pack.error){status(pack.error);return}
+  window.lastScout={kind:'200wnevrdown',pack};
+  const btc=pack.btc&&pack.btc.last;
+  const missing=pack.missing&&pack.missing.length?('  ·  missing '+pack.missing.join(', ')):''
+    +(etfErr?('  ·  ETF cache: '+etfErr):'');
+  status((pack.btc?('Bitcoin '+formatMult(pack.btc.last&&pack.btc.last.indexed)+'  ·  risen '+pack.btc.streak+' weeks in a row'):'200-week averages')+missing);
+  const note=$('sourceNote');
+  if(note){
+    note.textContent='Bitcoin Sunday closes from the Combined daily cache (live-updated). ETF Friday closes are Yahoo dividend-adjusted total return (SPY, QQQ, GLD, AGG, TLT). Indexed to the first full Bitcoin 200-week window (week of 11 May 2014). Chart idea: @dotkrueger.';
+  }
+  attachPaintCanvas(main,(ctx,w,h)=>paintNeverDown(ctx,w,h,pack));
+  const cnv=window.scoutCanvas;
+  if(cnv){
+    cnv.style.cursor='crosshair';
+    cnv.addEventListener('mousemove',ev=>{
+      const rect=cnv.getBoundingClientRect();
+      const x=ev.clientX-rect.left;
+      const w=rect.width, padL=58, padR=78, plotW=w-padL-padR;
+      const t0=pack.startT, t1=pack.endT;
+      const t=t0+(t1-t0)*((x-padL)/Math.max(1,plotW));
+      if(x<padL||x>padL+plotW){$('legend').textContent='';return}
+      const bits=[isoWeek(t)];
+      pack.assets.forEach(s=>{
+        let best=null,bd=1e18;
+        for(const p of s.pts){const d=Math.abs(p.time-t); if(d<bd){bd=d;best=p}}
+        if(best&&bd<=10*86400) bits.push(s.name+' '+formatMult(best.indexed)+(best.down?' down':''));
+      });
+      $('legend').textContent=bits.join('  ·  ');
+    });
+    cnv.addEventListener('mouseleave',()=>{$('legend').textContent=''});
+  }
+}
+window.renderNeverDownView=renderNeverDownView;
+window.computeNeverDown=computeNeverDown;
+window.formatMult=formatMult;

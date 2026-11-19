@@ -202,6 +202,9 @@ html.dark table.annual-returns tr.up td.pct{background:#1b5e20;color:#c8e6c9}
 html.dark table.annual-returns tr.down td,html.dark table.annual-returns tr.down td.yr{color:#ef9a9a}
 html.dark table.annual-returns tr.down td.pct{background:#5d1a1a;color:#ffcdd2}
 .annual-returns-empty{padding:24px 16px;color:var(--muted);font-size:13px}
+body.scout-neverdown #scaleToggle,body.scout-neverdown #markerBox,body.scout-neverdown #ratioBox,body.scout-neverdown #ratioLogBox{display:none}
+body.scout-neverdown #main{height:680px}
+body.scout-neverdown #chartWatermark{display:none}
 p.view-jump{margin:8px 0}
 
 #annBox{display:none;align-items:center;gap:8px;flex-wrap:wrap}
@@ -361,7 +364,8 @@ body.page-v2 #viewToggle button:disabled{opacity:.45;cursor:not-allowed}
   body.page-v2.scout-hcycles #main,
   body.page-v2.scout-spiral #main,
   body.page-v2.scout-ranges #main,
-  body.page-v2.scout-annualreturns #main{height:min(360px,70vh) !important}
+  body.page-v2.scout-annualreturns #main,
+  body.page-v2.scout-neverdown #main{height:min(600px,85vh) !important}
 }
 
 /* v2: keep Cycles and Spiral visible but disabled (with a tooltip) when the symbol is not Bitcoin. */

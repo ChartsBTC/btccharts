@@ -296,3 +296,29 @@ Sanity checks on this refresh:
 - Gold 2011-08-22 close 1,888.70; 2020-08-06 close 2,069.40; 2026-11-12
   close 3,931.90.
 - CPI-U values match the published BLS prints listed in the CPI sections.
+
+## etf_weekly — SPY, QQQ, GLD, AGG, TLT weekly total return (Yahoo)
+
+File: `etf_weekly.json`. Used only by the v2 view **200-week average has never gone down**.
+
+Free Yahoo Finance v8 chart API, daily `adjclose` (split- and dividend-adjusted, i.e. total return) for `SPY`, `QQQ`, `GLD`, `AGG`, and `TLT` from 2010-01-04. This script then keeps one value per week: the last New York session on or before that week’s Friday, stored under the week’s Sunday 00:00 UTC so it lines up with Bitcoin Sunday closes.
+
+These are ETF total-return series, not the site’s monthly `goldUSD` / `goldLBMA` or S&P 500 price-index files, which are too coarse for a 200-week average.
+
+Refresh:
+
+```
+python3 fetch_etf_weekly.py
+```
+
+If Yahoo returns HTTP 429 to urllib, fetch the same charts with a real browser and convert:
+
+```
+node tools_fetch_etf_weekly.js
+```
+
+(that writes `/tmp/etf-raw/{SYM}.txt` and runs `fetch_etf_weekly.py --from-dir /tmp/etf-raw`).
+
+Yahoo’s terms apply; this is a static research cache for the chart, the same republishing approach already used for the other Yahoo series on this site.
+
+Coverage on the last refresh: 2010-01-10 through 2026-11-15 (Friday session 2026-11-13), 880 weeks per symbol.
