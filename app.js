@@ -5,7 +5,11 @@ const PUBLIC_CHART_BASE='https://chartsbtc.github.io/btccharts/';
 const ADVANCED_HASH_IDS=['cy','ll','pl','vt','rp','rpl','ep','ch','cl','hv','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','da','ca','cp','ym','otd','ott','rb','an','cm','rma','rme','el','ss','sp','sf','sh'];
 const VIEW_ALIASES={annualreturns:'annualreturns'};
 function resolveHashAliases(hash){
-  const parts=String(hash||'').replace(/^#/,'').split('z').filter(Boolean);
+  const raw=String(hash||'').replace(/^#/,'');
+  // Short aliases such as #annualreturns are v2 entry points only, so a
+  // Classic/Advanced permalink keeps its previous meaning.
+  if(typeof isV2Page!=='function'||!isV2Page()) return raw;
+  const parts=raw.split('z').filter(Boolean);
   return parts.map(p=>VIEW_ALIASES[p]?'vtg'+VIEW_ALIASES[p]:p).join('z');
 }
 function isClassicPage(){return window.CHART_PAGE==='classic'}
@@ -13,7 +17,6 @@ function isAdvancedPage(){return window.CHART_PAGE==='advanced'}
 function isV2Page(){return window.CHART_PAGE==='v2'}
 function hashHasAdvanced(hash){
   const parts=String(hash||'').replace(/^#/,'').split('z').filter(Boolean);
-  if(parts.some(p=>VIEW_ALIASES[p])) return true;
   const ids=ADVANCED_HASH_IDS.slice().sort((a,b)=>b.length-a.length);
   return parts.some(part=>ids.some(id=>part===id||part.startsWith(id+'g')));
 }
@@ -1299,7 +1302,8 @@ const CYCLE_HEAD=['Cycle','Day #','Date','USD','Scaled'];
 let tableOpen=false, tableCsv=[];
 function setTableHead(cols){$('chart_table').tHead.innerHTML='<tr>'+cols.map(c=>'<th>'+c+'</th>').join('')+'</tr>'}
 function syncYearlyReturnsLink(show){
-  if(typeof isClassicPage==='function'&&isClassicPage()){
+  // Yearly-view jump link is v2-only until Jim approves adding it on Advanced.
+  if(typeof isV2Page!=='function'||!isV2Page()){
     const el=$('yearlyReturnsLink'); if(el) el.hidden=true;
     return;
   }
