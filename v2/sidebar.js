@@ -342,6 +342,12 @@
       e.preventDefault();
       setOpen(false);
     });
+    document.addEventListener('click',e=>{
+      if(!isStacked()) return;
+      if(!aside.classList.contains('open')) return;
+      if(aside.contains(e.target)) return;
+      setOpen(false);
+    });
 
     const wrapHist=fn=>{
       return function(){
