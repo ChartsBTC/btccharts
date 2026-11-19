@@ -994,6 +994,10 @@ function renderPowerLawView(){
 
 async function composeScoutImage(){
   await waitPaint();
+  if(window.lastScout&&window.lastScout.kind==='annualreturns'&&typeof composeAnnualReturnsImage==='function'){
+    const img=composeAnnualReturnsImage();
+    if(img) return img;
+  }
   if(window.scoutCanvas && !scoutPlots.length){
     const src=window.scoutCanvas;
     const cssW=src.clientWidth||src.width, dpr=src.width/Math.max(1,cssW);
@@ -1053,6 +1057,7 @@ async function renderScout(kind){
   if(kind==='hcycles'){await renderHcyclesView();return true}
   if(kind==='spiral'){await renderSpiralView();return true}
   if(kind==='ranges'){await renderRangesView();return true}
+  if(kind==='annualreturns'){await renderAnnualReturnsView();return true}
   return false;
 }
 
@@ -2968,3 +2973,340 @@ async function renderSpiralView(){
 }
 window.renderSpiralView=renderSpiralView;
 
+function yearEndCloses(daily){
+  const map=new Map();
+  for(const b of daily||[]){
+    if(!b||!(b.close>0)||b.time==null) continue;
+    const y=new Date(b.time*1000).getUTCFullYear();
+    const prev=map.get(y);
+    if(!prev||b.time>prev.time) map.set(y,b);
+  }
+  return map;
+}
+function formatAnnualPrice(v){
+  if(v==null||!isFinite(v)) return '';
+  const sign=v<0?'-':'';
+  const abs=Math.abs(v);
+  let body;
+  if(abs>=1000) body=Math.round(abs).toLocaleString('en-US');
+  else if(abs>=100) body=String(Math.round(abs));
+  else if(abs>=10){body=(Math.round(abs*10)/10).toFixed(1); if(body.endsWith('.0')) body=body.slice(0,-2)}
+  else body=abs.toFixed(2);
+  return sign+body;
+}
+function formatAnnualPct(p){
+  if(p==null||!isFinite(p)) return '';
+  const n=Math.round(p);
+  return (n>0?'+':'')+n+'%';
+}
+function annualUsesDollar(market){
+  return market!=='cpiAUCSL' && market!=='cpiAUCNS';
+}
+function annualPriceLabel(v, market){
+  const n=formatAnnualPrice(v);
+  if(!n) return '';
+  return annualUsesDollar(market)?'$'+n:n;
+}
+function computeAnnualReturns(daily, opts){
+  opts=opts||{};
+  const startYear=opts.startYear||2011;
+  const ends=yearEndCloses(daily);
+  const years=[...ends.keys()].sort((a,b)=>a-b);
+  if(!years.length) return [];
+  const lastYear=years[years.length-1];
+  const lastBar=ends.get(lastYear);
+  const lastDate=new Date(lastBar.time*1000);
+  const ytd=lastDate.getUTCMonth()!==11 || lastDate.getUTCDate()<31;
+  const market=opts.market||'';
+  const rows=[];
+  for(let y=startYear;y<=lastYear;y++){
+    const prev=ends.get(y-1);
+    const end=ends.get(y);
+    if(!prev||!end||!(prev.close>0)||!(end.close>0)) continue;
+    const isYtd=y===lastYear && ytd;
+    const pct=(end.close/prev.close-1)*100;
+    rows.push({
+      year:y,
+      ytd:isYtd,
+      yearLabel:isYtd?y+' YTD':String(y),
+      start:prev.close,
+      startTime:prev.time,
+      startLabel:annualPriceLabel(prev.close, market),
+      end:end.close,
+      endTime:end.time,
+      endLabel:annualPriceLabel(end.close, market),
+      pct,
+      pctRound:Math.round(pct),
+      pctLabel:formatAnnualPct(pct),
+      up:pct>=0
+    });
+  }
+  return rows;
+}
+function annualReturnsTitle(market, rows){
+  const last=rows&&rows.length?rows.at(-1).year:new Date().getUTCFullYear();
+  const first=rows&&rows.length?rows[0].year:2011;
+  const btc=!market||typeof isBtcMarket!=='function'||isBtcMarket(market);
+  const who=btc?'Bitcoin':((typeof shortMarketLabel==='function'?shortMarketLabel(market):null)||(typeof marketLabel==='function'?marketLabel(market):'Series'));
+  return who+' Returns: '+first+' - '+last;
+}
+function symlogY(v, linthresh){
+  linthresh=linthresh||100;
+  const s=v<0?-1:v>0?1:0;
+  const a=Math.abs(v);
+  if(a<=linthresh) return s*(a/linthresh);
+  return s*(1+Math.log10(a/linthresh));
+}
+function paintAnnualReturnsBars(ctx, w, h, rows, opts){
+  opts=opts||{};
+  const th=typeof T==='function'?T():{bg:'#fff',text:'#333',grid:'#eee',border:'#ccc',muted:'#666'};
+  ctx.fillStyle=opts.bg||th.bg;
+  ctx.fillRect(0,0,w,h);
+  if(!rows||!rows.length) return;
+  const padL=56, padR=16, padT=26, padB=36;
+  const plotW=w-padL-padR, plotH=h-padT-padB;
+  if(plotW<80||plotH<60) return;
+  const linthresh=100;
+  const maxAbs=Math.max(100, ...rows.map(r=>Math.abs(r.pct)));
+  const yMax=symlogY(maxAbs*1.15, linthresh);
+  const yMin=-symlogY(Math.max(100, ...rows.map(r=>r.pct<0?Math.abs(r.pct):0))*1.15, linthresh);
+  // include room for the biggest positive and any negatives; always show a bit of the other side
+  const lo=Math.min(yMin, -0.6);
+  const hi=Math.max(yMax, 0.6);
+  const yOf=v=>{
+    const y=symlogY(v, linthresh);
+    return padT+plotH*(1-(y-lo)/(hi-lo));
+  };
+  const ticks=[0,50,100,200,500,1000,2000,5000,10000];
+  const allTicks=[];
+  for(const t of ticks){
+    if(t===0){allTicks.push(0);continue}
+    allTicks.push(t); allTicks.push(-t);
+  }
+  ctx.font='10px Verdana,Arial,sans-serif';
+  ctx.textAlign='right'; ctx.textBaseline='middle';
+  ctx.strokeStyle=th.grid; ctx.lineWidth=1;
+  for(const t of allTicks){
+    const yv=symlogY(t, linthresh);
+    if(yv<lo||yv>hi) continue;
+    const y=yOf(t);
+    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(padL+plotW,y); ctx.stroke();
+    ctx.fillStyle=th.muted||th.text;
+    const lab=t===0?'0':(t>0?'+':'')+t+'%';
+    ctx.fillText(lab, padL-6, y);
+  }
+  ctx.strokeStyle=th.border; ctx.strokeRect(padL,padT,plotW,plotH);
+  const zero=yOf(0);
+  ctx.strokeStyle=th.text; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(padL,zero); ctx.lineTo(padL+plotW,zero); ctx.stroke();
+  const n=rows.length;
+  const slot=plotW/n;
+  const barW=Math.max(6, Math.min(28, slot*0.62));
+  ctx.font='10px Verdana,Arial,sans-serif';
+  ctx.textAlign='center';
+  rows.forEach((r,i)=>{
+    const cx=padL+slot*(i+0.5);
+    const y=yOf(r.pct);
+    const top=Math.min(y,zero), bot=Math.max(y,zero);
+    ctx.fillStyle=r.up?'#2e7d32':'#c62828';
+    ctx.fillRect(cx-barW/2, top, barW, Math.max(2, bot-top));
+    const lab=r.pctLabel||formatAnnualPct(r.pct);
+    ctx.fillStyle=r.up?'#1b5e20':'#b71c1c';
+    if(typeof isDark==='function'&&isDark()) ctx.fillStyle=r.up?'#a5d6a7':'#ef9a9a';
+    ctx.textBaseline=r.up?'bottom':'top';
+    const ly=r.up?top-3:bot+3;
+    ctx.font='bold 9px Verdana,Arial,sans-serif';
+    ctx.fillText(lab, cx, ly);
+    ctx.font='10px Verdana,Arial,sans-serif';
+    ctx.fillStyle=th.text;
+    ctx.textBaseline='top';
+    const yearLab="'"+String(r.year).slice(2)+(r.ytd?'*':'');
+    ctx.fillText(yearLab, cx, padT+plotH+6);
+  });
+  ctx.fillStyle=th.muted||th.text;
+  ctx.font='10px Verdana,Arial,sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='bottom';
+  ctx.fillText('% change (symlog)', padL+plotW/2, h-1);
+}
+
+function annualReturnsTableHtml(title, rows){
+  const body=rows.map(r=>{
+    const cls=r.up?'up':'down';
+    return '<tr class="'+cls+'">'+
+      '<td class="yr">'+r.yearLabel+'</td>'+
+      '<td>'+r.startLabel+'</td>'+
+      '<td>'+r.endLabel+'</td>'+
+      '<td class="pct">'+r.pctLabel+'</td>'+
+      '</tr>';
+  }).join('');
+  return '<div class="annual-returns-wrap">'+
+    '<h3 class="annual-returns-title">'+title+'</h3>'+
+    '<table class="annual-returns"><thead><tr>'+
+    '<th>Year</th><th>Year Start</th><th>Year End</th><th>% Change</th>'+
+    '</tr></thead><tbody>'+body+'</tbody></table></div>';
+}
+
+async function renderAnnualReturnsView(){
+  clearCharts();
+  document.body.classList.add('scout-view','scout-annualreturns');
+  $('charts').classList.remove('has-volume');
+  const m=typeof currentMarket==='function'?currentMarket():'combinedUSD';
+  // Use the daily cache (plus live top-up), not the display interval's last
+  // bar. All Data auto-picks Monthly, whose last bar is the month start and
+  // would truncate the current year's YTD close.
+  const raw=await getDaily(m);
+  let daily=raw.map(toBar).filter(b=>b&&b.close>0);
+  if($('c')&&$('c').checked&&$('e')&&$('e').value){
+    const end=Date.parse($('e').value)/1000;
+    if(end) daily=daily.filter(b=>b.time<=end+12*3600);
+  }
+  const rows=computeAnnualReturns(daily,{startYear:2011,market:m});
+  const title=annualReturnsTitle(m, rows);
+  window.lastScout={kind:'annualreturns',market:m,rows,title,daily};
+  const main=$('main');
+  main.innerHTML='';
+  $('subs').innerHTML='';
+  if(typeof setEpochLegend==='function') setEpochLegend(false);
+  if(!rows.length){
+    const msg=document.createElement('p');
+    msg.className='annual-returns-empty';
+    msg.textContent='Not enough year-end closes on this series to compute annual returns (need a prior-year close and a year-end close from 2011 onward).';
+    main.appendChild(msg);
+    status('Not enough data for annual returns on '+(typeof marketLabel==='function'?marketLabel(m):m)+'.');
+    return;
+  }
+  const last=rows.at(-1);
+  status(rows.length+' calendar years · '+(typeof marketLabel==='function'?marketLabel(m):m)+' · last '+last.endLabel+' ('+last.yearLabel+' '+last.pctLabel+')');
+  const wrap=document.createElement('div');
+  wrap.innerHTML=annualReturnsTableHtml(title, rows);
+  $('subs').appendChild(wrap.firstChild);
+  attachPaintCanvas(main,(ctx,w,h)=>{
+    paintAnnualReturnsBars(ctx,w,h,rows,{});
+  });
+  const cnv=window.scoutCanvas;
+  if(cnv){
+    cnv.style.cursor='crosshair';
+    cnv.addEventListener('mousemove',ev=>{
+      const rect=cnv.getBoundingClientRect();
+      const x=ev.clientX-rect.left;
+      const w=rect.width, padL=56, padR=16, plotW=w-padL-padR;
+      const i=Math.floor((x-padL)/ (plotW/rows.length));
+      if(i<0||i>=rows.length){$('legend').textContent='';return}
+      const r=rows[i];
+      const when=typeof isoUTC==='function'?isoUTC(r.endTime):'';
+      $('legend').textContent=r.yearLabel+'  ·  start '+r.startLabel+'  ·  end '+r.endLabel+(when?' on '+when:'')+'  ·  '+r.pctLabel;
+    });
+    cnv.addEventListener('mouseleave',()=>{$('legend').textContent=''});
+  }
+}
+
+function paintAnnualReturnsTable(ctx, x, y, w, title, rows, dpr){
+  const th=typeof T==='function'?T():{bg:'#fff',text:'#333',title:'#222',border:'#ccc'};
+  const dark=typeof isDark==='function'&&isDark();
+  const scale=dpr||1;
+  const pad=Math.round(16*scale);
+  const titleSize=Math.round(16*scale);
+  const rowH=Math.round(22*scale);
+  const headH=Math.round(24*scale);
+  const tableW=Math.min(w-pad*2, Math.round(560*scale));
+  const tableLeft=x+Math.round((w-tableW)/2);
+  const cols=[0.18,0.28,0.28,0.26];
+  const colX=i=>{
+    let a=0; for(let k=0;k<i;k++) a+=cols[k];
+    return tableLeft+a*tableW;
+  };
+  const colW=i=>cols[i]*tableW;
+  ctx.fillStyle=th.title||th.text;
+  ctx.font='bold '+titleSize+'px Verdana,Arial,sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.fillText(title, x+w/2, y);
+  const ty=y+titleSize+Math.round(10*scale);
+  const headers=['Year','Year Start','Year End','% Change'];
+  ctx.font='bold '+Math.round(11*scale)+'px Verdana,Arial,sans-serif';
+  ctx.fillStyle=th.text;
+  ctx.textBaseline='middle';
+  for(let i=0;i<4;i++){
+    ctx.textAlign=i===0?'left':'right';
+    const tx=i===0?colX(i)+Math.round(8*scale):colX(i)+colW(i)-Math.round(8*scale);
+    ctx.fillText(headers[i], tx, ty+headH/2);
+  }
+  ctx.strokeStyle=th.border; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(tableLeft, ty+headH); ctx.lineTo(tableLeft+tableW, ty+headH); ctx.stroke();
+  rows.forEach((r,ri)=>{
+    const ry=ty+headH+ri*rowH;
+    const vals=[r.yearLabel, r.startLabel, r.endLabel, r.pctLabel];
+    if(!r.up){
+      ctx.fillStyle=dark?'rgba(198,40,40,0.22)':'#ffcdd2';
+      ctx.fillRect(colX(3), ry, colW(3), rowH);
+    }else{
+      ctx.fillStyle=dark?'rgba(46,125,50,0.28)':'#c8e6c9';
+      ctx.fillRect(colX(3), ry, colW(3), rowH);
+    }
+    ctx.font=Math.round(12*scale)+'px Verdana,Arial,sans-serif';
+    if(ri===0) ctx.font='bold '+Math.round(12*scale)+'px Verdana,Arial,sans-serif';
+    // year bold always
+    for(let i=0;i<4;i++){
+      if(i===0) ctx.font='bold '+Math.round(12*scale)+'px Verdana,Arial,sans-serif';
+      else ctx.font=Math.round(12*scale)+'px Verdana,Arial,sans-serif';
+      if(!r.up) ctx.fillStyle=dark?'#ef9a9a':'#c62828';
+      else if(i===3) ctx.fillStyle=dark?'#c8e6c9':'#1b5e20';
+      else ctx.fillStyle=th.text;
+      ctx.textAlign=i===0?'left':'right';
+      const tx=i===0?colX(i)+Math.round(8*scale):colX(i)+colW(i)-Math.round(8*scale);
+      ctx.fillText(vals[i], tx, ry+rowH/2);
+    }
+    ctx.strokeStyle=th.border;
+    ctx.beginPath(); ctx.moveTo(tableLeft, ry+rowH); ctx.lineTo(tableLeft+tableW, ry+rowH); ctx.stroke();
+  });
+  const tableH=titleSize+Math.round(10*scale)+headH+rows.length*rowH;
+  return tableH+Math.round(12*scale);
+}
+
+function composeAnnualReturnsImage(){
+  const s=window.lastScout||{};
+  const rows=s.rows||[];
+  const title=s.title||chartTitleLine();
+  const src=window.scoutCanvas;
+  const dpr=(src&&src.clientWidth)?(src.width/Math.max(1,src.clientWidth)):(window.devicePixelRatio||1);
+  const cssW=src&&src.clientWidth?src.clientWidth:720;
+  const width=Math.round(Math.max(720, cssW)*dpr);
+  const pad=Math.round(16*dpr);
+  const titleH=0; // table painter draws the title
+  const tableH=paintAnnualReturnsTable(
+    // measure: title + head + rows
+    {fillRect(){},fillText(){},beginPath(){},moveTo(){},lineTo(){},stroke(){},fillStyle:'',font:'',textAlign:'',textBaseline:'',strokeStyle:'',lineWidth:0},
+    0,pad,width,title,rows,dpr
+  );
+  const chartCssH=src? (src.clientHeight||320) : 320;
+  const chartH=Math.round(chartCssH*dpr);
+  const canvas=document.createElement('canvas');
+  canvas.width=width;
+  canvas.height=pad+tableH+chartH+pad;
+  const ctx=canvas.getContext('2d');
+  const th=typeof T==='function'?T():{exportBg:'#fff'};
+  ctx.fillStyle=th.exportBg||th.bg||'#fff';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  const used=paintAnnualReturnsTable(ctx,0,pad,width,title,rows,dpr);
+  const chartY=pad+used;
+  if(src){
+    ctx.drawImage(src, 0, chartY, width, chartH);
+  }else{
+    ctx.save();
+    ctx.translate(0, chartY);
+    // paint in CSS pixels then scale? easier to set transform
+    ctx.setTransform(dpr,0,0,dpr,0,chartY);
+    paintAnnualReturnsBars(ctx, width/dpr, chartCssH, rows, {bg:th.exportBg||th.bg});
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.restore();
+  }
+  if(typeof paintWatermark==='function'){
+    paintWatermark(ctx,0,chartY,width,chartH,dpr,{});
+  }
+  return canvas;
+}
+
+window.renderAnnualReturnsView=renderAnnualReturnsView;
+window.computeAnnualReturns=computeAnnualReturns;
+window.composeAnnualReturnsImage=composeAnnualReturnsImage;
+window.formatAnnualPrice=formatAnnualPrice;
+window.formatAnnualPct=formatAnnualPct;

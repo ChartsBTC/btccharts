@@ -182,6 +182,28 @@ body.scout-ranges #scaleToggle,body.scout-ranges #markerBox,body.scout-ranges #r
 body.scout-ranges #main{height:560px}
 body.scout-ranges #chartWatermark{bottom:52px}
 
+body.scout-annualreturns #scaleToggle,body.scout-annualreturns #markerBox,body.scout-annualreturns #ratioBox,body.scout-annualreturns #ratioLogBox{display:none}
+body.scout-annualreturns #charts{display:flex;flex-direction:column}
+body.scout-annualreturns #subs{order:-1}
+body.scout-annualreturns #main{height:320px}
+body.scout-annualreturns #chartWatermark{bottom:48px;left:64px}
+.annual-returns-wrap{padding:14px 16px 10px;border-bottom:1px solid var(--chart-border,#ccc);background:var(--bg)}
+.annual-returns-title{margin:0 0 10px;font-size:16px;font-weight:bold;text-align:center;color:var(--fg)}
+table.annual-returns{width:100%;max-width:560px;margin:0 auto;border-collapse:collapse;font-size:13px}
+table.annual-returns th,table.annual-returns td{border:1px solid var(--table-border,#ccc);padding:5px 12px;text-align:right}
+table.annual-returns th{background:var(--panel,#f6f6f6);font-weight:bold}
+table.annual-returns th:first-child,table.annual-returns td.yr{text-align:left;font-weight:bold}
+table.annual-returns tr.up td.pct{background:#c8e6c9;color:#1b5e20;font-weight:bold}
+table.annual-returns tr.down td{color:#c62828}
+table.annual-returns tr.down td.yr{color:#c62828}
+table.annual-returns tr.down td.pct{background:#ffcdd2;color:#b71c1c;font-weight:bold}
+html.dark table.annual-returns th{background:#1c1c1c}
+html.dark table.annual-returns tr.up td.pct{background:#1b5e20;color:#c8e6c9}
+html.dark table.annual-returns tr.down td,html.dark table.annual-returns tr.down td.yr{color:#ef9a9a}
+html.dark table.annual-returns tr.down td.pct{background:#5d1a1a;color:#ffcdd2}
+.annual-returns-empty{padding:24px 16px;color:var(--muted);font-size:13px}
+p.view-jump{margin:8px 0}
+
 #annBox{display:none;align-items:center;gap:8px;flex-wrap:wrap}
 body.page-advanced:not(.scout-view):not(.cycles-view):not(.loglog-view) #annBox{display:inline-flex}
 #annBox input[type="date"]{font-size:12px;width:9.2em}
@@ -338,7 +360,8 @@ body.page-v2 #viewToggle button:disabled{opacity:.45;cursor:not-allowed}
   body.page-v2.scout-onthisday.has-otd-table #main,
   body.page-v2.scout-hcycles #main,
   body.page-v2.scout-spiral #main,
-  body.page-v2.scout-ranges #main{height:min(360px,70vh) !important}
+  body.page-v2.scout-ranges #main,
+  body.page-v2.scout-annualreturns #main{height:min(360px,70vh) !important}
 }
 
 /* v2: keep Cycles and Spiral visible but disabled (with a tooltip) when the symbol is not Bitcoin. */

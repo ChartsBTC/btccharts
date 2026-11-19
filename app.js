@@ -3,11 +3,17 @@ const LW=LightweightCharts;
 
 const PUBLIC_CHART_BASE='https://chartsbtc.github.io/btccharts/';
 const ADVANCED_HASH_IDS=['cy','ll','pl','vt','rp','rpl','ep','ch','cl','hv','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','da','ca','cp','ym','otd','ott','rb','an','cm','rma','rme','el','ss','sp','sf','sh'];
+const VIEW_ALIASES={annualreturns:'annualreturns'};
+function resolveHashAliases(hash){
+  const parts=String(hash||'').replace(/^#/,'').split('z').filter(Boolean);
+  return parts.map(p=>VIEW_ALIASES[p]?'vtg'+VIEW_ALIASES[p]:p).join('z');
+}
 function isClassicPage(){return window.CHART_PAGE==='classic'}
 function isAdvancedPage(){return window.CHART_PAGE==='advanced'}
 function isV2Page(){return window.CHART_PAGE==='v2'}
 function hashHasAdvanced(hash){
   const parts=String(hash||'').replace(/^#/,'').split('z').filter(Boolean);
+  if(parts.some(p=>VIEW_ALIASES[p])) return true;
   const ids=ADVANCED_HASH_IDS.slice().sort((a,b)=>b.length-a.length);
   return parts.some(part=>ids.some(id=>part===id||part.startsWith(id+'g')));
 }
@@ -89,6 +95,7 @@ function buildHash(){const h=[];const skip=isClassicPage()?new Set(ADVANCED_HASH
   if(typeof isDark==='function'&&isDark())h.push('dk');
   return h.join('z')}
 function parseHash(hash){
+  hash=resolveHashAliases(hash);
   if(typeof isV2Page==='function'&&isV2Page()) snapshotV2FormDefaults();
   if(!hash){ if(typeof isV2Page==='function'&&isV2Page()) v2ParsedHashIds=new Set(); return; }
   // reset everything to blank/unchecked; hash fully describes state (original reset v,t,r)
@@ -140,6 +147,7 @@ function syncViewToggle(){
   document.body.classList.toggle('scout-hcycles',vt==='hcycles' && !on);
   document.body.classList.toggle('scout-ranges',vt==='ranges' && !on);
   document.body.classList.toggle('scout-spiral',vt==='spiral' && !on);
+  document.body.classList.toggle('scout-annualreturns',vt==='annualreturns' && !on);
   if(vt==='onthisday' && typeof syncOnThisDayUi==='function') syncOnThisDayUi();
   document.body.classList.toggle('mode-mult',vt==='returns' && ($('rm')&&$('rm').value==='mult') && !on);
   document.querySelectorAll('#viewToggle button').forEach(b=>b.classList.toggle('on',(b.dataset.cy==='1')===on && !vt));
@@ -163,7 +171,7 @@ function syncViewToggle(){
 }
 
 
-const V2_LONG_VIEWS={powerlaw:1,drawdown:1,ath:1,sats:1,pricema:1,returns:1,epoch:1,calyear:1,onthisday:1,hcycles:1,ranges:1,spiral:1,cycles:1};
+const V2_LONG_VIEWS={powerlaw:1,drawdown:1,ath:1,sats:1,pricema:1,returns:1,epoch:1,calyear:1,onthisday:1,hcycles:1,ranges:1,spiral:1,annualreturns:1,cycles:1};
 let v2LastMode={vt:'',cy:false}, v2PriceWindow=null;
 function v2IsLong(vt,cy){return !!(cy||V2_LONG_VIEWS[vt||''] )}
 function v2IsPriceDefaultWindow(){return !$('c').checked && $('r') && $('r').value==='60'}
@@ -701,7 +709,7 @@ function drawPowerLawUplot(u,xs,barAt){
 }
 
 let plSeries={};
-function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if(typeof clearScoutPlots==='function')clearScoutPlots();if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view','scout-view','scout-powerlaw','scout-drawdown','scout-ath','scout-sats','scout-pricema','scout-osc','scout-returns','mode-mult','scout-blend','scout-epoch','scout-calyear','scout-onthisday','has-otd-table','scout-hcycles','scout-ranges','scout-spiral');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null;if($('plLegend')&&!($('pl')&&$('pl').checked)){$('plLegend').hidden=true;$('plLegend').textContent=''}}
+function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if(typeof clearScoutPlots==='function')clearScoutPlots();if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view','scout-view','scout-powerlaw','scout-drawdown','scout-ath','scout-sats','scout-pricema','scout-osc','scout-returns','mode-mult','scout-blend','scout-epoch','scout-calyear','scout-onthisday','has-otd-table','scout-hcycles','scout-ranges','scout-spiral','scout-annualreturns');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null;if($('plLegend')&&!($('pl')&&$('pl').checked)){$('plLegend').hidden=true;$('plLegend').textContent=''}}
 
 
 function macroSourceCredit(m,cm){
@@ -840,10 +848,13 @@ async function draw(pushUrl){
   if(typeof scoutView==='function'&&scoutView()){
     if(await renderScout(scoutView())){
       if(typeof refreshV2DailyScoutStatus==='function') refreshV2DailyScoutStatus();
+      if(typeof syncYearlyReturnsLink==='function') syncYearlyReturnsLink(false);
       if(tableOpen)showTable();else clear_table();return}
   }
   const marks=await priceEventMarkers();
-  render(interval,marks);if(tableOpen)showTable();else clear_table();
+  render(interval,marks);
+  if(typeof syncYearlyReturnsLink==='function') syncYearlyReturnsLink(interval==='Yearly');
+  if(tableOpen)showTable();else clear_table();
 }
 let cycleSeries=[];
 async function drawCycles(){
@@ -1287,6 +1298,34 @@ const PRICE_HEAD=['Timestamp','Open','High','Low','Close','Volume (BTC)','Volume
 const CYCLE_HEAD=['Cycle','Day #','Date','USD','Scaled'];
 let tableOpen=false, tableCsv=[];
 function setTableHead(cols){$('chart_table').tHead.innerHTML='<tr>'+cols.map(c=>'<th>'+c+'</th>').join('')+'</tr>'}
+function syncYearlyReturnsLink(show){
+  if(typeof isClassicPage==='function'&&isClassicPage()){
+    const el=$('yearlyReturnsLink'); if(el) el.hidden=true;
+    return;
+  }
+  let el=$('yearlyReturnsLink');
+  if(!el){
+    el=document.createElement('p');
+    el.id='yearlyReturnsLink';
+    el.className='small view-jump';
+    const note=$('sourceNote');
+    if(note&&note.parentNode) note.parentNode.insertBefore(el, note);
+    else if($('content_chart')) $('content_chart').appendChild(el);
+    else return;
+  }
+  const on=!!show;
+  el.hidden=!on;
+  if(on){
+    el.innerHTML='See also: <a href="#vtgannualreturns" id="yearlyReturnsJump">Bitcoin Annual Returns table</a>';
+    const a=$('yearlyReturnsJump');
+    if(a) a.onclick=e=>{
+      e.preventDefault();
+      if($('vt')) $('vt').value='annualreturns';
+      if(typeof syncViewToggle==='function') syncViewToggle();
+      draw(1);
+    };
+  }
+}
 function clear_table(){
   tableOpen=false; tableCsv=[];
   if($('chart_table').tBodies[0]) $('chart_table').tBodies[0].innerHTML='';
@@ -1295,7 +1334,7 @@ function clear_table(){
   if($('loadRaw')) $('loadRaw').textContent='Show data';
 }
 function showTable(){
-  if($('cy').checked) fillCycleTable(); else if(typeof scoutView==='function'&&scoutView()==='powerlaw') fillPowerLawTable(); else if(scoutView()==='drawdown') fillDrawdownTable(); else if(scoutView()==='ath') fillAthTable(); else if(scoutView()==='sats') fillSatsTable(); else if(scoutView()==='pricema') fillPriceMaTable(); else if(scoutView()==='returns') fillReturnsTable(); else if(scoutView()==='epoch') fillEpochTable(); else if(scoutView()==='calyear') fillCalYearTable(); else if(scoutView()==='onthisday') fillOnThisDayTable(); else if(scoutView()==='hcycles') fillHcyclesTable(); else if(scoutView()==='ranges') fillRangesTable(); else fillPriceTable();
+  if($('cy').checked) fillCycleTable(); else if(typeof scoutView==='function'&&scoutView()==='powerlaw') fillPowerLawTable(); else if(scoutView()==='drawdown') fillDrawdownTable(); else if(scoutView()==='ath') fillAthTable(); else if(scoutView()==='sats') fillSatsTable(); else if(scoutView()==='pricema') fillPriceMaTable(); else if(scoutView()==='returns') fillReturnsTable(); else if(scoutView()==='epoch') fillEpochTable(); else if(scoutView()==='calyear') fillCalYearTable(); else if(scoutView()==='onthisday') fillOnThisDayTable(); else if(scoutView()==='hcycles') fillHcyclesTable(); else if(scoutView()==='ranges') fillRangesTable(); else if(scoutView()==='annualreturns') fillAnnualReturnsTable(); else fillPriceTable();
   tableOpen=true;
   $('tableWrap').hidden=false;
   $('downloadCsv').hidden=false;
@@ -1357,6 +1396,17 @@ function fillRangesTable(){
     rows.push('<tr>'+rec.map(v=>'<td>'+v+'</td>').join('')+'</tr>');
   });
   $('chart_table').tBodies[0].innerHTML=rows.join('');
+}
+function fillAnnualReturnsTable(){
+  const s=window.lastScout||{}, rows=s.rows||[];
+  const head=['Year','Year Start','Year End','% Change'];
+  setTableHead(head); tableCsv=[head.slice()];
+  const html=rows.map(r=>{
+    const rec=[r.yearLabel||String(r.year), r.startLabel||'', r.endLabel||'', r.pctLabel||''];
+    tableCsv.push(rec);
+    return '<tr>'+rec.map(c=>'<td>'+c+'</td>').join('')+'</tr>';
+  }).join('');
+  $('chart_table').tBodies[0].innerHTML=html;
 }
 function fillHcyclesTable(){
   const s=window.lastScout||{}, cycles=s.cycles||[];
@@ -1534,7 +1584,7 @@ function isMobileUa(){
 }
 function chartTitleLine(){
   const vt=($('vt')&&$('vt').value)||'';
-  if(vt==='powerlaw'||vt==='drawdown'||vt==='ath'||vt==='sats'||vt==='pricema'||vt==='returns'||vt==='epoch'||vt==='calyear'||vt==='onthisday'||vt==='hcycles'||vt==='ranges'||vt==='spiral'){
+  if(vt==='powerlaw'||vt==='drawdown'||vt==='ath'||vt==='sats'||vt==='pricema'||vt==='returns'||vt==='epoch'||vt==='calyear'||vt==='onthisday'||vt==='hcycles'||vt==='ranges'||vt==='spiral'||vt==='annualreturns'){
     const m=currentMarket();
     const name=m==='combinedUSD'?'BTC/USD Combined':('BTC/USD '+marketLabel(m).replace(/ \(USD\)/,''));
     if(vt==='ranges'){
@@ -1543,6 +1593,10 @@ function chartTitleLine(){
     }
     if(vt==='spiral'){
       return name+' · Bitcoin Spiral';
+    }
+    if(vt==='annualreturns'){
+      const s=window.lastScout||{};
+      return s.title||(name+' · Annual returns');
     }
     if(vt==='hcycles'){
       return name+' · Halving cycles (USD)';
@@ -1914,6 +1968,13 @@ function shareCaption(){
     bits.push('BTC/USD trailing '+(mode==='mult'?'1-year price multiple':n+'-year '+(mode==='roi'?'ROI':'CAGR')));
     if(last) bits.push('currently '+fmt(last.value)+(mode==='mult'?'x':''));
     if(s.lowest) bits.push('lowest '+fmt(s.lowest.value));
+    return bits.join('. ')+'.';
+  }
+  if(vt==='annualreturns'){
+    const s=window.lastScout||{};
+    bits.push(s.title||'Bitcoin annual returns');
+    const last=s.rows&&s.rows.at(-1);
+    if(last) bits.push((last.yearLabel||last.year)+' '+ (last.startLabel||'')+' to '+(last.endLabel||'')+' ('+(last.pctLabel||'')+')');
     return bits.join('. ')+'.';
   }
   if($('cy')&&$('cy').checked){
