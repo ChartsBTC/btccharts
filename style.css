@@ -391,3 +391,75 @@ body.page-v2.non-btc #vt option[value="spiral"]{display:block !important}
   body.page-v2.cycles-view table.cycles td:nth-child(n+6):nth-child(-n+9){display:none}
 }
 
+
+/* v2 chart sidebar — Classic/Advanced are unaffected (body.page-v2 only) */
+body.page-v2 #header .wrap,
+body.page-v2 .submenu.wrap{max-width:1380px}
+body.page-v2 .v2-shell{
+  display:flex;
+  align-items:flex-start;
+  gap:16px;
+  max-width:1380px;
+  margin:0 auto;
+  padding:0 10px;
+}
+body.page-v2 #v2Sidebar{
+  flex:0 0 200px;
+  width:200px;
+  padding:10px 0 24px;
+  box-sizing:border-box;
+}
+body.page-v2 .v2-main{flex:1 1 auto;min-width:0}
+body.page-v2 .v2-main #chartoptions,
+body.page-v2 .v2-main #content_chart{max-width:none;padding-left:0;padding-right:0}
+body.page-v2 #v2SidebarToggle{display:none}
+body.page-v2 #v2Nav h6{
+  margin:14px 0 4px;
+  font-size:10px;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+  color:var(--muted);
+  font-weight:bold;
+}
+body.page-v2 #v2Nav h6:first-child{margin-top:2px}
+body.page-v2 #v2Nav ul{list-style:none;margin:0 0 2px;padding:0}
+body.page-v2 #v2Nav li{margin:0}
+body.page-v2 #v2Nav a{
+  display:block;
+  padding:2px 0 2px 8px;
+  color:var(--fg);
+  text-decoration:none;
+  border-left:3px solid transparent;
+  line-height:1.35;
+}
+body.page-v2 #v2Nav a:hover{color:var(--link);text-decoration:underline}
+body.page-v2 #v2Nav a.on{
+  font-weight:bold;
+  color:#f7931a;
+  border-left-color:#f7931a;
+}
+@media (max-width:960px){
+  body.page-v2 .v2-shell{display:block;max-width:1180px;padding:0 10px}
+  body.page-v2 #v2Sidebar{
+    flex:none;
+    width:auto;
+    padding:8px 0 0;
+    border-bottom:1px solid var(--border);
+  }
+  body.page-v2 #v2SidebarToggle{
+    display:inline-block;
+    font:bold 12px Verdana,Arial,sans-serif;
+    padding:5px 12px;
+    margin:0 0 8px;
+    cursor:pointer;
+    color:var(--seg-fg);
+    background:var(--seg-bg);
+    border:1px solid #f7931a;
+    border-radius:4px;
+  }
+  body.page-v2 #v2Nav{display:none;padding:0 0 10px}
+  body.page-v2 #v2Sidebar.open #v2Nav,
+  body.page-v2.v2-sidebar-open #v2Nav{display:block}
+  body.page-v2 .v2-main #chartoptions,
+  body.page-v2 .v2-main #content_chart{padding-left:0;padding-right:0}
+}
