@@ -1002,6 +1002,10 @@ async function composeScoutImage(){
     const img=composeCorrectionsImage();
     if(img) return img;
   }
+  if(window.lastScout&&window.lastScout.kind==='assetreturns'&&typeof composeAssetReturnsImage==='function'){
+    const img=composeAssetReturnsImage();
+    if(img) return img;
+  }
   if(window.scoutCanvas && !scoutPlots.length){
     const src=window.scoutCanvas;
     const cssW=src.clientWidth||src.width, dpr=src.width/Math.max(1,cssW);
@@ -1071,6 +1075,10 @@ async function renderScout(kind){
   if(kind==='corrections'){
     if(typeof isV2Page==='function'&&!isV2Page()) return false;
     await renderCorrectionsView();return true
+  }
+  if(kind==='assetreturns'){
+    if(typeof isV2Page==='function'&&!isV2Page()) return false;
+    await renderAssetReturnsView();return true
   }
   if(kind==='200wnevrdown'){
     if(typeof isV2Page==='function'&&!isV2Page()) return false;
@@ -4042,3 +4050,347 @@ async function renderCorrectionsView(){
 window.renderCorrectionsView=renderCorrectionsView;
 window.computeMajorCorrections=computeMajorCorrections;
 window.composeCorrectionsImage=composeCorrectionsImage;
+
+const ASSET_RETURN_TICKERS=['DBC','IWD','VNQ','IWM','MDY','BIL','SPY','EFA','TIP','BND','HYG','QQQ','CWB','LQD','EMB','TLT','VWO','PFF','IWF','GLD'];
+let etfYearendCache=null;
+async function loadEtfYearend(){
+  if(etfYearendCache) return etfYearendCache;
+  const root=(window.CHART_PAGE==='advanced'||window.CHART_PAGE==='v2')?'../data/':'data/';
+  const r=await fetch(root+'macro/etf_yearend.json',{cache:'no-cache'});
+  if(!r.ok) throw new Error('Failed to load ETF year-end cache ('+r.status+')');
+  etfYearendCache=await r.json();
+  return etfYearendCache;
+}
+
+function formatAssetPct(p, asMultiple){
+  if(p==null||!isFinite(p)) return '–';
+  if(asMultiple && Math.abs(p)>=10){
+    const m=1+p;
+    const body=m>=100?Math.round(m).toLocaleString('en-US'):(m>=10?m.toFixed(1):m.toFixed(2));
+    return body+'x';
+  }
+  const pct=p*100;
+  const sign=pct>0?'+':pct<0?'':'';
+  if(Math.abs(pct)>=100) return sign+Math.round(pct).toLocaleString('en-US')+'%';
+  return sign+pct.toFixed(1)+'%';
+}
+
+function yearEndMapFromDaily(daily){
+  const map=typeof yearEndCloses==='function'?yearEndCloses(daily):new Map();
+  const out=new Map();
+  for(const [y,b] of map){
+    if(!b||!(b.close>0)) continue;
+    out.set(+y, {date:typeof isoUTC==='function'?isoUTC(b.time):'', time:b.time, close:b.close});
+  }
+  return out;
+}
+
+function yearEndMapFromEtf(series){
+  const out=new Map();
+  if(!series||!series.years) return out;
+  for(const [y,o] of Object.entries(series.years)){
+    if(!o||!(o.adjclose>0)) continue;
+    out.set(+y, {date:o.date, time:o.time, close:o.adjclose});
+  }
+  return out;
+}
+
+function assetPeriodReturn(end, start){
+  if(!end||!start||!(start.close>0)||!(end.close>0)) return null;
+  return end.close/start.close-1;
+}
+
+function computeAssetReturns(btcDaily, etfCache, opts){
+  opts=opts||{};
+  const startYear=opts.startYear||2011;
+  const assets=[];
+  const btcMarket=opts.market||'combinedUSD';
+  const btcMap=yearEndMapFromDaily(btcDaily);
+  const btcLast=(btcDaily&&btcDaily.length)?btcDaily[btcDaily.length-1]:null;
+  const lastYear=btcLast?new Date(btcLast.time*1000).getUTCFullYear():new Date().getUTCFullYear();
+  const calYears=[];
+  for(let y=startYear;y<lastYear;y++) calYears.push(y);
+  const ytdYear=lastYear;
+
+  function buildRow(name, id, map, lastBar, kind){
+    const last=lastBar&&lastBar.close>0?{date:lastBar.date||(typeof isoUTC==='function'?isoUTC(lastBar.time):''), time:lastBar.time, close:lastBar.close}:null;
+    const cells={};
+    for(const y of calYears){
+      cells[y]=assetPeriodReturn(map.get(y), map.get(y-1));
+    }
+    const ytd=assetPeriodReturn(last, map.get(ytdYear-1));
+    const start=map.get(startYear-1);
+    const cum=assetPeriodReturn(last, start);
+    let ann=null, years=null;
+    if(cum!=null && start && last && last.time>start.time){
+      const days=(typeof daysBetweenUtc==='function')?daysBetweenUtc(start.time, last.time):Math.round((last.time-start.time)/86400);
+      years=days/365.25;
+      if(years>0 && (1+cum)>0) ann=Math.pow(1+cum, 1/years)-1;
+    }
+    return {name, id, kind, cells, ytd, cum, ann, years, last, start, map};
+  }
+
+  const btcLastBar=btcLast?{time:btcLast.time, close:btcLast.close, date:typeof isoUTC==='function'?isoUTC(btcLast.time):''}:null;
+  assets.push(buildRow('Bitcoin','BTC',btcMap,btcLastBar,'btc'));
+
+  const series=(etfCache&&etfCache.series)||{};
+  const missing=[];
+  for(const sym of ASSET_RETURN_TICKERS){
+    const s=series[sym];
+    if(!s){ missing.push(sym); continue; }
+    const map=yearEndMapFromEtf(s);
+    const last={time:s.lastTime, close:s.lastAdjclose, date:s.last};
+    if(!(last.close>0)){ missing.push(sym); continue; }
+    assets.push(buildRow(sym,sym,map,last,'etf'));
+  }
+  assets.sort((a,b)=>{
+    const av=a.ytd, bv=b.ytd;
+    if(av==null&&bv==null) return a.name.localeCompare(b.name);
+    if(av==null) return 1;
+    if(bv==null) return -1;
+    return av-bv;
+  });
+
+  function footerFor(getter){
+    const vals=assets.map(a=>({name:a.name, v:getter(a)})).filter(x=>x.v!=null&&isFinite(x.v));
+    if(!vals.length) return {high:null, low:null, pctPos:null};
+    let high=vals[0], low=vals[0];
+    let pos=0;
+    for(const x of vals){
+      if(x.v>high.v) high=x;
+      if(x.v<low.v) low=x;
+      if(x.v>=0) pos++;
+    }
+    return {high, low, pctPos:pos/vals.length, n:vals.length};
+  }
+  const footCols={};
+  for(const y of calYears) footCols[y]=footerFor(a=>a.cells[y]);
+  footCols.ytd=footerFor(a=>a.ytd);
+  footCols.cum=footerFor(a=>a.cum);
+  footCols.ann=footerFor(a=>a.ann);
+
+  return {
+    assets, missing, calYears, ytdYear, startYear,
+    asOf: etfCache&&etfCache.asOf,
+    btcAsOf: btcLastBar&&btcLastBar.date,
+    market: btcMarket,
+    footCols
+  };
+}
+
+function assetReturnsTitle(){ return 'Asset Class Total Returns Since 2011'; }
+
+function assetCellClass(v){
+  if(v==null||!isFinite(v)) return 'na';
+  return v>=0?'up':'down';
+}
+
+function assetReturnsTableHtml(title, pack){
+  const years=pack.calYears||[];
+  const ytdLab=pack.ytdYear+' YTD';
+  const cumLab=(pack.startYear)+'–'+String(pack.ytdYear).slice(2);
+  const head=['Asset', ytdLab, cumLab, 'Ann.'].concat(years.map(String));
+  function cell(v, kind){
+    const cls=assetCellClass(v);
+    return '<td class="pct '+cls+'">'+formatAssetPct(v, kind==='cum')+'</td>';
+  }
+  const body=pack.assets.map(a=>{
+    const tds=['<td class="asset">'+a.name+'</td>', cell(a.ytd,'ytd'), cell(a.cum,'cum'), cell(a.ann,'ann')]
+      .concat(years.map(y=>cell(a.cells[y],'y')));
+    return '<tr>'+tds.join('')+'</tr>';
+  }).join('');
+  function footRow(label, pick){
+    const tds=['<td class="asset">'+label+'</td>'];
+    const keys=['ytd','cum','ann'].concat(years);
+    keys.forEach(k=>{
+      const f=pack.footCols[k];
+      const item=f&&f[pick];
+      if(pick==='pctPos'){
+        const v=f&&f.pctPos;
+        tds.push('<td class="foot">'+((v==null)?'–':(Math.round(v*100)+'%'))+'</td>');
+      }else if(!item){
+        tds.push('<td class="foot">–</td>');
+      }else{
+        const kind=k==='cum'?'cum':'y';
+        tds.push('<td class="foot"><span class="fn">'+item.name+'</span><span class="fv">'+formatAssetPct(item.v, kind==='cum')+'</span></td>');
+      }
+    });
+    return '<tr class="foot-'+label.toLowerCase().replace(/[^a-z]+/g,'')+'">'+tds.join('')+'</tr>';
+  }
+  const foot=footRow('Highest','high')+footRow('Lowest','low')+footRow('% Positive','pctPos');
+  const asOf=pack.btcAsOf||pack.asOf||'';
+  const sub='Calendar-year total returns, sorted by '+ytdLab+' (worst first). ETF figures use dividend-adjusted Yahoo closes; Bitcoin uses the same daily-close math as Annual Returns. As of '+asOf+'.';
+  return '<div class="asset-returns-wrap">'+
+    '<h3 class="asset-returns-title">'+title+'</h3>'+
+    '<p class="asset-returns-sub">'+sub+'</p>'+
+    '<div class="asset-returns-scroll"><table class="asset-returns"><thead><tr>'+
+    head.map((h,i)=>'<th'+(i===0?' class="asset"':'')+'>'+h+'</th>').join('')+
+    '</tr></thead><tbody>'+body+'</tbody><tfoot>'+foot+'</tfoot></table></div></div>';
+}
+
+function paintAssetReturnsTable(ctx, x, y, w, title, pack, dpr){
+  const th=typeof T==='function'?T():{bg:'#fff',text:'#333',title:'#222',border:'#ccc',muted:'#666'};
+  const dark=typeof isDark==='function'&&isDark();
+  const scale=dpr||1;
+  const pad=Math.round(12*scale);
+  const titleSize=Math.round(16*scale);
+  const subSize=Math.round(10*scale);
+  const rowH=Math.round(20*scale);
+  const headH=Math.round(28*scale);
+  const years=pack.calYears||[];
+  const nNum=years.length+3;
+  const nameW=Math.round(72*scale);
+  const tableLeft=x+pad;
+  const tableW=w-pad*2;
+  const numW=(tableW-nameW)/nNum;
+  const colX=i=>tableLeft+(i===0?0:nameW+(i-1)*numW);
+  const colW=i=>i===0?nameW:numW;
+  ctx.fillStyle=th.title||th.text;
+  ctx.font='bold '+titleSize+'px Verdana,Arial,sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.fillText(title, x+w/2, y);
+  const ytdLab=pack.ytdYear+' YTD';
+  const sub='Total returns, sorted by '+ytdLab+' (worst first). ETFs: Yahoo adjclose. Bitcoin: daily closes. As of '+(pack.btcAsOf||pack.asOf||'')+'.';
+  ctx.font=subSize+'px Verdana,Arial,sans-serif';
+  ctx.fillStyle=th.muted||th.text;
+  ctx.fillText(sub, x+w/2, y+titleSize+Math.round(4*scale), tableW);
+  const ty=y+titleSize+subSize+Math.round(12*scale);
+  const headers=['Asset', ytdLab, (pack.startYear)+'–'+String(pack.ytdYear).slice(2), 'Ann.'].concat(years.map(String));
+  ctx.font='bold '+Math.round(9*scale)+'px Verdana,Arial,sans-serif';
+  ctx.fillStyle=th.text;
+  ctx.textBaseline='middle';
+  headers.forEach((h,i)=>{
+    ctx.textAlign=i===0?'left':'center';
+    const tx=i===0?colX(i)+Math.round(4*scale):colX(i)+colW(i)/2;
+    ctx.fillText(h, tx, ty+headH/2, colW(i)-Math.round(4*scale));
+  });
+  ctx.strokeStyle=th.border; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(tableLeft, ty+headH); ctx.lineTo(tableLeft+tableW, ty+headH); ctx.stroke();
+
+  function shade(v){
+    if(v==null||!isFinite(v)) return {bg:'transparent', fg:th.muted};
+    if(v>=0) return {bg:dark?'rgba(46,125,50,0.35)':'#c8e6c9', fg:dark?'#c8e6c9':'#1b5e20'};
+    return {bg:dark?'rgba(198,40,40,0.32)':'#ffcdd2', fg:dark?'#ffcdd2':'#b71c1c'};
+  }
+  function paintRow(vals, ry, opts){
+    opts=opts||{};
+    vals.forEach((cell,i)=>{
+      if(i>0 && cell.v!=null && !opts.plain){
+        const s=shade(cell.v);
+        ctx.fillStyle=s.bg;
+        ctx.fillRect(colX(i), ry, colW(i), rowH);
+      }else if(opts.foot){
+        ctx.fillStyle=dark?'#1a1a1a':'#f6f6f6';
+        ctx.fillRect(colX(i), ry, colW(i), rowH);
+      }
+      ctx.font=((i===0||opts.foot)?'bold ':'')+Math.round(opts.foot?8:10)*scale+'px Verdana,Arial,sans-serif';
+      if(i===0) ctx.fillStyle=th.text;
+      else if(opts.plain||opts.foot) ctx.fillStyle=th.text;
+      else ctx.fillStyle=shade(cell.v).fg;
+      ctx.textAlign=i===0?'left':'center';
+      const tx=i===0?colX(i)+Math.round(4*scale):colX(i)+colW(i)/2;
+      ctx.fillText(cell.text, tx, ry+rowH/2, colW(i)-Math.round(4*scale));
+    });
+    ctx.strokeStyle=th.border;
+    ctx.beginPath(); ctx.moveTo(tableLeft, ry+rowH); ctx.lineTo(tableLeft+tableW, ry+rowH); ctx.stroke();
+  }
+  pack.assets.forEach((a,ri)=>{
+    const vals=[{text:a.name,v:null},
+        {text:formatAssetPct(a.ytd), v:a.ytd},
+        {text:formatAssetPct(a.cum,true), v:a.cum},
+        {text:formatAssetPct(a.ann), v:a.ann}]
+      .concat(years.map(y=>({text:formatAssetPct(a.cells[y]), v:a.cells[y]})));
+    paintRow(vals, ty+headH+ri*rowH, {});
+  });
+  const footStart=ty+headH+pack.assets.length*rowH;
+  const footDefs=[
+    {label:'Highest', pick:'high'},
+    {label:'Lowest', pick:'low'},
+    {label:'% Positive', pick:'pctPos'}
+  ];
+  footDefs.forEach((fd,fi)=>{
+    const keys=['ytd','cum','ann'].concat(years);
+    const vals=[{text:fd.label,v:null}].concat(keys.map(k=>{
+      const f=pack.footCols[k];
+      if(fd.pick==='pctPos') return {text:(f&&f.pctPos!=null)?(Math.round(f.pctPos*100)+'%'):'–', v:null};
+      const item=f&&f[fd.pick];
+      if(!item) return {text:'–', v:null};
+      const kind=k==='cum'?'cum':'y';
+      return {text:item.name+' '+formatAssetPct(item.v, kind==='cum'), v:null};
+    }));
+    paintRow(vals, footStart+fi*rowH, {foot:true, plain:true});
+  });
+  const tableH=titleSize+subSize+Math.round(12*scale)+headH+(pack.assets.length+3)*rowH;
+  return tableH+Math.round(12*scale);
+}
+
+function composeAssetReturnsImage(){
+  const s=window.lastScout||{};
+  const pack=s.pack||{};
+  const title=s.title||assetReturnsTitle();
+  const dpr=window.devicePixelRatio||1;
+  const cssW=Math.max(1100, (document.querySelector('.asset-returns')||{}).clientWidth||1100);
+  const width=Math.round(cssW*dpr);
+  const pad=Math.round(16*dpr);
+  const dummy={fillRect(){},fillText(){},beginPath(){},moveTo(){},lineTo(){},stroke(){},fillStyle:'',font:'',textAlign:'',textBaseline:'',strokeStyle:'',lineWidth:0};
+  const tableH=paintAssetReturnsTable(dummy,0,pad,width,title,pack,dpr);
+  const canvas=document.createElement('canvas');
+  canvas.width=width;
+  canvas.height=pad+tableH+pad;
+  const ctx=canvas.getContext('2d');
+  const th=typeof T==='function'?T():{exportBg:'#fff'};
+  ctx.fillStyle=th.exportBg||th.bg||'#fff';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  paintAssetReturnsTable(ctx,0,pad,width,title,pack,dpr);
+  if(typeof paintWatermark==='function'){
+    paintWatermark(ctx,0,pad,width,tableH,dpr,{});
+  }
+  return canvas;
+}
+
+async function renderAssetReturnsView(){
+  clearCharts();
+  document.body.classList.add('scout-view','scout-assetreturns');
+  $('charts').classList.remove('has-volume');
+  const m=typeof currentMarket==='function'?currentMarket():'combinedUSD';
+  const btcMarket=(typeof isBtcMarket==='function'&&isBtcMarket(m))?m:'combinedUSD';
+  let daily=[], etf=null, etfErr='';
+  try{
+    const raw=await getDaily(btcMarket);
+    daily=raw.map(toBar).filter(b=>b&&b.close>0);
+  }catch(e){status('Error loading Bitcoin history: '+e.message);return}
+  try{etf=await loadEtfYearend()}
+  catch(e){etfErr=e.message; console.warn(e)}
+  const pack=computeAssetReturns(daily, etf, {market:btcMarket, startYear:2011});
+  const title=assetReturnsTitle();
+  window.lastScout={kind:'assetreturns', market:btcMarket, pack, title, rows:pack.assets};
+  const main=$('main');
+  main.innerHTML='';
+  $('subs').innerHTML='';
+  if(typeof setEpochLegend==='function') setEpochLegend(false);
+  if(!pack.assets.length){
+    const msg=document.createElement('p');
+    msg.className='asset-returns-empty';
+    msg.textContent='Not enough data to compute asset-class returns.';
+    main.appendChild(msg);
+    status('Not enough data for asset-class returns.');
+    return;
+  }
+  const btc=pack.assets.find(a=>a.id==='BTC');
+  const gld=pack.assets.find(a=>a.id==='GLD');
+  const miss=pack.missing&&pack.missing.length?('  ·  missing '+pack.missing.join(', ')):''+(etfErr?('  ·  ETF cache: '+etfErr):'');
+  status(pack.assets.length+' assets  ·  Bitcoin '+(btc?formatAssetPct(btc.ytd):'')+' YTD  ·  Gold '+(gld?formatAssetPct(gld.ytd):'')+' YTD  ·  as of '+(pack.btcAsOf||pack.asOf||'')+miss);
+  const note=$('sourceNote');
+  if(note){
+    note.textContent='Bitcoin uses Combined daily closes (same year-end math as Annual Returns). ETFs are Yahoo dividend- and split-adjusted closes (total return), year-end and latest session cached in data/macro/etf_yearend.json. Sorted by '+pack.ytdYear+' YTD, worst first. Chart idea: Charlie Bilello.';
+  }
+  const wrap=document.createElement('div');
+  wrap.innerHTML=assetReturnsTableHtml(title, pack);
+  $('subs').appendChild(wrap.firstChild);
+  // no sparkline; leave main empty so the table can use the space
+}
+
+window.renderAssetReturnsView=renderAssetReturnsView;
+window.computeAssetReturns=computeAssetReturns;
+window.composeAssetReturnsImage=composeAssetReturnsImage;
+window.formatAssetPct=formatAssetPct;

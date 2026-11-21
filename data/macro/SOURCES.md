@@ -322,3 +322,35 @@ node tools_fetch_etf_weekly.js
 Yahoo’s terms apply; this is a static research cache for the chart, the same republishing approach already used for the other Yahoo series on this site.
 
 Coverage on the last refresh: 2010-01-10 through 2026-11-15 (Friday session 2026-11-13), 880 weeks per symbol.
+
+## etf_yearend — asset-class year-end total returns (Yahoo)
+
+File: `etf_yearend.json`. Used by the v2 view **Asset Class Total Returns Since 2011**.
+
+Free Yahoo Finance v8 chart API, daily `adjclose` (split- and dividend-adjusted, i.e. total return) for `DBC`, `IWD`, `VNQ`, `IWM`, `MDY`, `BIL`, `SPY`, `EFA`, `TIP`, `BND`, `HYG`, `QQQ`, `CWB`, `LQD`, `EMB`, `TLT`, `VWO`, `PFF`, `IWF`, and `GLD` from December 2009. For each symbol the file stores:
+
+- the adjusted close of the last New York session in each calendar year
+- the latest session in the cache (`last` / `lastAdjclose`)
+
+Calendar-year total return is year-end ÷ prior year-end − 1. YTD is the latest close ÷ prior year-end − 1. Cumulative and annualized figures run from the 2010 year-end close to the latest session (annualized with a 365.25-day year count).
+
+Bitcoin is **not** in this file; the view computes it from the site’s Combined (or selected-exchange) daily closes, with the same year-end math as Annual Returns.
+
+Refresh:
+
+```
+python3 fetch_etf_yearend.py
+```
+
+If Yahoo returns HTTP 429 to urllib, fetch the same charts with a real browser and convert:
+
+```
+node tools_fetch_etf_yearend.js
+```
+
+(that writes `/tmp/etf-raw/{SYM}.txt` and runs `fetch_etf_yearend.py --from-dir /tmp/etf-raw`). The weekly ETF helper (`tools_fetch_etf_weekly.js` / `fetch_etf_weekly.py`) is unchanged and still builds `etf_weekly.json` for the 200-week view.
+
+Yahoo’s terms apply; this is a static research cache for the chart, the same republishing approach already used for the other Yahoo series on this site.
+
+Coverage on the last refresh: year-ends 2009 or 2010 through 2025, plus the latest session on 2026-11-19 or 2026-11-20, for all 20 symbols (none missing).
+
