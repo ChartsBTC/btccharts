@@ -998,6 +998,10 @@ async function composeScoutImage(){
     const img=composeAnnualReturnsImage();
     if(img) return img;
   }
+  if(window.lastScout&&window.lastScout.kind==='corrections'&&typeof composeCorrectionsImage==='function'){
+    const img=composeCorrectionsImage();
+    if(img) return img;
+  }
   if(window.scoutCanvas && !scoutPlots.length){
     const src=window.scoutCanvas;
     const cssW=src.clientWidth||src.width, dpr=src.width/Math.max(1,cssW);
@@ -1063,6 +1067,10 @@ async function renderScout(kind){
   if(kind==='annualreturns'){
     if(typeof isV2Page==='function'&&!isV2Page()) return false;
     await renderAnnualReturnsView();return true
+  }
+  if(kind==='corrections'){
+    if(typeof isV2Page==='function'&&!isV2Page()) return false;
+    await renderCorrectionsView();return true
   }
   if(kind==='200wnevrdown'){
     if(typeof isV2Page==='function'&&!isV2Page()) return false;
@@ -3623,3 +3631,414 @@ async function renderNeverDownView(){
 window.renderNeverDownView=renderNeverDownView;
 window.computeNeverDown=computeNeverDown;
 window.formatMult=formatMult;
+
+function utcDay(t){
+  return Date.parse(new Date(t*1000).toISOString().slice(0,10)+'T00:00:00Z')/1000;
+}
+function daysBetweenUtc(t0, t1){
+  return Math.round((utcDay(t1)-utcDay(t0))/86400);
+}
+function formatCorrDate(t){
+  if(t==null||!isFinite(t)) return '?';
+  const d=new Date(t*1000);
+  const mon=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()];
+  return mon+' '+d.getUTCDate()+', '+d.getUTCFullYear();
+}
+function computeMajorCorrections(daily, opts){
+  opts=opts||{};
+  const start=opts.startTime!=null?opts.startTime:Date.UTC(2010,8,1)/1000; // 1 Sep 2010
+  const market=opts.market||'';
+  const bars=[];
+  for(const b of daily||[]){
+    if(!b||!(b.close>0)||b.time==null) continue;
+    if(b.time<start) continue;
+    bars.push(b);
+  }
+  const rows=[];
+  let ath=0, peak=null, trough=null;
+  function closeRow(newHighBar, ongoing){
+    if(!peak||!trough||!(trough.close<peak.close)) return;
+    const dd=(trough.close/peak.close-1)*100;
+    if(dd>-30) return;
+    const ret=(peak.close/trough.close-1)*100;
+    const days=daysBetweenUtc(peak.time, trough.time);
+    const recovDays=(!ongoing&&newHighBar)?daysBetweenUtc(peak.time, newHighBar.time):null;
+    rows.push({
+      peakTime:peak.time,
+      troughTime:trough.time,
+      newHighTime:ongoing||!newHighBar?null:newHighBar.time,
+      high:peak.close,
+      low:trough.close,
+      dd,
+      ret,
+      days,
+      recovDays,
+      ongoing:!!ongoing,
+      periodLabel:formatCorrDate(peak.time)+' – '+formatCorrDate(trough.time)+(ongoing?' (ongoing)':''),
+      highLabel:typeof annualPriceLabel==='function'?annualPriceLabel(peak.close, market):String(Math.round(peak.close)),
+      lowLabel:typeof annualPriceLabel==='function'?annualPriceLabel(trough.close, market):String(Math.round(trough.close)),
+      ddLabel:typeof formatAnnualPct==='function'?formatAnnualPct(dd):(Math.round(dd)+'%'),
+      retLabel:typeof formatAnnualPct==='function'?formatAnnualPct(ret):(Math.round(ret)+'%'),
+      newHighLabel:ongoing||!newHighBar?'?':formatCorrDate(newHighBar.time),
+      recovDaysLabel:recovDays==null?'?':String(recovDays)
+    });
+  }
+  for(const b of bars){
+    if(b.close>ath){
+      closeRow(b, false);
+      ath=b.close;
+      peak=b;
+      trough=b;
+    }else if(peak && (trough==null || b.close<trough.close)){
+      trough=b;
+    }
+  }
+  closeRow(null, true);
+  // newest first
+  rows.reverse();
+  let recordDays=0;
+  for(const r of rows) if(r.days>recordDays) recordDays=r.days;
+  for(const r of rows) r.record=recordDays>0 && r.days===recordDays;
+  return {rows, bars, recordDays, start};
+}
+
+function correctionsTitle(market){
+  const btc=!market||typeof isBtcMarket!=='function'||isBtcMarket(market);
+  const who=btc?'Bitcoin':((typeof shortMarketLabel==='function'?shortMarketLabel(market):null)||(typeof marketLabel==='function'?marketLabel(market):'Series'));
+  return who+' Major Corrections From All-Time Highs';
+}
+
+function ddShade(pct, dark){
+  const t=Math.min(1, Math.max(0, (Math.abs(pct)-30)/60));
+  if(dark){
+    const r=Math.round(90+80*t), g=Math.round(28-10*t), b=Math.round(28-10*t);
+    return {bg:'rgba('+r+','+g+','+b+','+(0.35+0.5*t)+')', fg:t>0.45?'#ffcdd2':'#ef9a9a'};
+  }
+  const r=Math.round(255-60*t), g=Math.round(205-175*t), b=Math.round(210-175*t);
+  return {bg:'rgb('+r+','+g+','+b+')', fg:t>0.55?'#fff':'#b71c1c'};
+}
+
+function correctionsTableHtml(title, pack){
+  const rows=pack.rows||[];
+  const body=rows.map((r,i)=>{
+    const cls=['corr-row', r.ongoing?'ongoing':'', r.record?'record':'', i===pack.selected?'on':''].filter(Boolean).join(' ');
+    const depth=Math.min(5, Math.max(0, Math.round((Math.abs(r.dd)-30)/12)));
+    return '<tr class="'+cls+'" data-i="'+i+'" data-depth="'+depth+'">'+
+      '<td class="period">'+r.periodLabel+'</td>'+
+      '<td class="days">'+r.days+'</td>'+
+      '<td>'+r.highLabel+'</td>'+
+      '<td>'+r.lowLabel+'</td>'+
+      '<td class="pct dd">'+r.ddLabel+'</td>'+
+      '<td class="pct ret">'+r.retLabel+'</td>'+
+      '<td>'+r.newHighLabel+'</td>'+
+      '<td>'+r.recovDaysLabel+'</td>'+
+      '</tr>';
+  }).join('');
+  return '<div class="corrections-wrap">'+
+    '<h3 class="corrections-title">'+title+'</h3>'+
+    '<p class="corrections-sub">Every decline of 30% or more from a closing all-time high, September 2010 to now. High, low and drawdown use daily closes, the same as Drawdown from ATH. Newest first.</p>'+
+    '<div class="corrections-scroll"><table class="corrections"><thead><tr>'+
+    '<th>Correction Period</th><th># Days</th><th>High</th><th>Low</th><th>% Decline</th>'+
+    '<th>% Return to New High</th><th>New High Date</th><th># Days Prior High to New High</th>'+
+    '</tr></thead><tbody>'+body+'</tbody></table></div></div>';
+}
+
+function paintCorrectionsSparkline(ctx, w, h, pack, opts){
+  opts=opts||{};
+  const th=typeof T==='function'?T():{bg:'#fff',text:'#333',grid:'#eee',border:'#ccc',muted:'#666'};
+  ctx.fillStyle=opts.bg||th.bg;
+  ctx.fillRect(0,0,w,h);
+  const rows=pack.rows||[];
+  const bars=pack.bars||[];
+  if(!bars.length){
+    ctx.fillStyle=th.muted; ctx.font='12px Verdana,Arial,sans-serif';
+    ctx.fillText('No data', 16, 24);
+    return;
+  }
+  let ath=0;
+  const pts=[];
+  for(const b of bars){
+    if(b.close>ath) ath=b.close;
+    pts.push({time:b.time, close:b.close, ath, dd:ath?(b.close/ath-1)*100:0});
+  }
+  const padL=52, padR=16, padT=22, padB=28;
+  const plotW=w-padL-padR, plotH=h-padT-padB;
+  if(plotW<80||plotH<40) return;
+  const t0=pts[0].time, t1=pts.at(-1).time;
+  const yMin=Math.min(-30, Math.min(...pts.map(p=>p.dd))*1.06);
+  const xOf=t=>padL+plotW*(t-t0)/Math.max(1,t1-t0);
+  const yOf=v=>padT+plotH*(v-0)/(yMin-0);
+  const dark=typeof isDark==='function'&&isDark();
+  // shade each correction peak→trough
+  rows.forEach((r,i)=>{
+    const x1=xOf(r.peakTime), x2=xOf(r.troughTime);
+    const sel=i===(pack.selected||0);
+    ctx.fillStyle=sel?(dark?'rgba(247,147,26,0.28)':'rgba(247,147,26,0.22)'):(dark?'rgba(198,40,40,0.12)':'rgba(229,57,53,0.08)');
+    ctx.fillRect(Math.min(x1,x2), padT, Math.max(2, Math.abs(x2-x1)), plotH);
+  });
+  // grid
+  ctx.font='10px Verdana,Arial,sans-serif';
+  ctx.textAlign='right'; ctx.textBaseline='middle';
+  const ticks=[0,-20,-40,-60,-80,-100];
+  for(const t of ticks){
+    if(t<yMin) continue;
+    const y=yOf(t);
+    ctx.strokeStyle=th.grid; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(padL+plotW,y); ctx.stroke();
+    ctx.fillStyle=th.muted;
+    ctx.fillText(t===0?'0':(t+'%'), padL-6, y);
+  }
+  ctx.strokeStyle=th.border; ctx.strokeRect(padL,padT,plotW,plotH);
+  // area
+  ctx.beginPath();
+  ctx.moveTo(xOf(pts[0].time), yOf(0));
+  for(const p of pts) ctx.lineTo(xOf(p.time), yOf(p.dd));
+  ctx.lineTo(xOf(pts.at(-1).time), yOf(0));
+  ctx.closePath();
+  ctx.fillStyle=dark?'rgba(229,57,53,0.45)':'rgba(229,57,53,0.28)';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(xOf(pts[0].time), yOf(pts[0].dd));
+  for(const p of pts) ctx.lineTo(xOf(p.time), yOf(p.dd));
+  ctx.strokeStyle='#e53935'; ctx.lineWidth=1.4;
+  ctx.stroke();
+  // year ticks
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.fillStyle=th.muted;
+  const y0=new Date(t0*1000).getUTCFullYear();
+  const yN=new Date(t1*1000).getUTCFullYear();
+  for(let y=y0;y<=yN;y++){
+    const t=Date.UTC(y,0,1)/1000;
+    if(t<t0||t>t1) continue;
+    const x=xOf(t);
+    ctx.strokeStyle=th.grid;
+    ctx.beginPath(); ctx.moveTo(x,padT); ctx.lineTo(x,padT+plotH); ctx.stroke();
+    if(y%2===0 || (yN-y0)<=8) ctx.fillText(String(y), x, padT+plotH+6);
+  }
+  ctx.fillStyle=th.text;
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.font='11px Verdana,Arial,sans-serif';
+  const last=pts.at(-1);
+  const sel=rows[pack.selected||0];
+  let cap='Drawdown from closing ATHs';
+  if(last) cap+='  ·  now '+last.dd.toFixed(1)+'%';
+  if(sel) cap+='  ·  selected '+sel.periodLabel+'  '+sel.ddLabel;
+  ctx.fillText(cap, padL, 4);
+  pack._spark={t0,t1,padL,padR,plotW};
+}
+
+function correctionsTableRowH(dpr){return Math.round(22*dpr)}
+
+function paintCorrectionsTable(ctx, x, y, w, title, pack, dpr){
+  const th=typeof T==='function'?T():{bg:'#fff',text:'#333',title:'#222',border:'#ccc',muted:'#666'};
+  const dark=typeof isDark==='function'&&isDark();
+  const scale=dpr||1;
+  const pad=Math.round(12*scale);
+  const titleSize=Math.round(16*scale);
+  const subSize=Math.round(10*scale);
+  const rowH=correctionsTableRowH(scale);
+  const headH=Math.round(36*scale);
+  const tableW=w-pad*2;
+  const tableLeft=x+pad;
+  // period, days, high, low, dd, ret, new high, recov days
+  const cols=[0.24,0.07,0.10,0.10,0.10,0.13,0.15,0.11];
+  const colX=i=>{let a=0; for(let k=0;k<i;k++) a+=cols[k]; return tableLeft+a*tableW};
+  const colW=i=>cols[i]*tableW;
+  ctx.fillStyle=th.title||th.text;
+  ctx.font='bold '+titleSize+'px Verdana,Arial,sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.fillText(title, x+w/2, y);
+  const sub='Daily closes, 30% or more from an all-time high. Newest first.';
+  ctx.font=subSize+'px Verdana,Arial,sans-serif';
+  ctx.fillStyle=th.muted||th.text;
+  ctx.fillText(sub, x+w/2, y+titleSize+Math.round(4*scale));
+  const ty=y+titleSize+subSize+Math.round(12*scale);
+  const headers=['Correction Period','# Days','High','Low','% Decline','% Return to New High','New High Date','# Days Prior High to New High'];
+  ctx.font='bold '+Math.round(9*scale)+'px Verdana,Arial,sans-serif';
+  ctx.fillStyle=th.text;
+  ctx.textBaseline='middle';
+  for(let i=0;i<headers.length;i++){
+    const left=i===0;
+    ctx.textAlign=left?'left':'right';
+    const tx=left?colX(i)+Math.round(6*scale):colX(i)+colW(i)-Math.round(6*scale);
+    // wrap long headers into two lines if needed
+    const words=headers[i];
+    ctx.fillText(words, tx, ty+headH/2, colW(i)-Math.round(8*scale));
+  }
+  ctx.strokeStyle=th.border; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(tableLeft, ty+headH); ctx.lineTo(tableLeft+tableW, ty+headH); ctx.stroke();
+  const rows=pack.rows||[];
+  rows.forEach((r,ri)=>{
+    const ry=ty+headH+ri*rowH;
+    if(r.record){
+      ctx.fillStyle=dark?'rgba(247,147,26,0.18)':'#fff3e0';
+      ctx.fillRect(tableLeft, ry, tableW, rowH);
+    }
+    const shade=ddShade(r.dd, dark);
+    ctx.fillStyle=shade.bg;
+    ctx.fillRect(colX(4), ry, colW(4), rowH);
+    const vals=[r.periodLabel, String(r.days), r.highLabel, r.lowLabel, r.ddLabel, r.retLabel, r.newHighLabel, r.recovDaysLabel];
+    for(let i=0;i<vals.length;i++){
+      ctx.font=((r.ongoing||i===0)?'bold ':'')+Math.round(11*scale)+'px Verdana,Arial,sans-serif';
+      if(i===4) ctx.fillStyle=shade.fg;
+      else if(r.record) ctx.fillStyle=dark?'#ffcc80':'#e65100';
+      else ctx.fillStyle=th.text;
+      const left=i===0;
+      ctx.textAlign=left?'left':'right';
+      const tx=left?colX(i)+Math.round(6*scale):colX(i)+colW(i)-Math.round(6*scale);
+      ctx.fillText(vals[i], tx, ry+rowH/2, colW(i)-Math.round(8*scale));
+    }
+    ctx.strokeStyle=th.border;
+    ctx.beginPath(); ctx.moveTo(tableLeft, ry+rowH); ctx.lineTo(tableLeft+tableW, ry+rowH); ctx.stroke();
+  });
+  const tableH=titleSize+subSize+Math.round(12*scale)+headH+rows.length*rowH;
+  return tableH+Math.round(12*scale);
+}
+
+function composeCorrectionsImage(){
+  const s=window.lastScout||{};
+  const pack=s.pack||{rows:s.rows||[], bars:s.bars||[], selected:s.selected||0};
+  const title=s.title||chartTitleLine();
+  const src=window.scoutCanvas;
+  const dpr=(src&&src.clientWidth)?(src.width/Math.max(1,src.clientWidth)):(window.devicePixelRatio||1);
+  const cssW=src&&src.clientWidth?src.clientWidth:960;
+  const width=Math.round(Math.max(880, cssW)*dpr);
+  const pad=Math.round(16*dpr);
+  const dummy={fillRect(){},fillText(){},beginPath(){},moveTo(){},lineTo(){},stroke(){},closePath(){},fill(){},fillStyle:'',font:'',textAlign:'',textBaseline:'',strokeStyle:'',lineWidth:0};
+  const tableH=paintCorrectionsTable(dummy,0,pad,width,title,pack,dpr);
+  const chartCssH=src?(src.clientHeight||220):220;
+  const chartH=Math.round(chartCssH*dpr);
+  const canvas=document.createElement('canvas');
+  canvas.width=width;
+  canvas.height=pad+tableH+chartH+pad;
+  const ctx=canvas.getContext('2d');
+  const th=typeof T==='function'?T():{exportBg:'#fff'};
+  ctx.fillStyle=th.exportBg||th.bg||'#fff';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  const used=paintCorrectionsTable(ctx,0,pad,width,title,pack,dpr);
+  const chartY=pad+used;
+  if(src){
+    ctx.drawImage(src, 0, chartY, width, chartH);
+  }else{
+    ctx.setTransform(dpr,0,0,dpr,0,chartY);
+    paintCorrectionsSparkline(ctx, width/dpr, chartCssH, pack, {bg:th.exportBg||th.bg});
+    ctx.setTransform(1,0,0,1,0,0);
+  }
+  if(typeof paintWatermark==='function'){
+    paintWatermark(ctx,0,chartY,width,chartH,dpr,{});
+  }
+  return canvas;
+}
+
+function bindCorrectionsInteractions(wrap, pack){
+  function select(i, scroll){
+    if(i==null||i<0||i>=pack.rows.length) return;
+    pack.selected=i;
+    if(window.lastScout) window.lastScout.selected=i;
+    wrap.querySelectorAll('tr.corr-row').forEach(tr=>tr.classList.toggle('on', +tr.dataset.i===i));
+    if(window.scoutCanvas && window._correctionsRedraw) window._correctionsRedraw();
+  }
+  wrap.addEventListener('click',e=>{
+    const tr=e.target.closest('tr.corr-row');
+    if(!tr) return;
+    select(+tr.dataset.i);
+  });
+  const cnv=window.scoutCanvas;
+  if(cnv){
+    cnv.style.cursor='crosshair';
+    const hit=ev=>{
+      const rect=cnv.getBoundingClientRect();
+      const x=ev.clientX-rect.left;
+      const sp=pack._spark;
+      if(!sp) return null;
+      const t=sp.t0+(sp.t1-sp.t0)*((x-sp.padL)/Math.max(1,sp.plotW));
+      let best=-1, bd=1e18;
+      pack.rows.forEach((r,i)=>{
+        const mid=(r.peakTime+r.troughTime)/2;
+        const d=Math.abs(t-mid);
+        const inside=t>=r.peakTime && t<=(r.newHighTime||pack.bars.at(-1).time);
+        if(inside && d<bd){bd=d; best=i}
+      });
+      return best;
+    };
+    cnv.addEventListener('mousemove',ev=>{
+      const sp=pack._spark;
+      if(!sp){$('legend').textContent='';return}
+      const rect=cnv.getBoundingClientRect();
+      const x=ev.clientX-rect.left;
+      if(x<sp.padL||x>sp.padL+sp.plotW){$('legend').textContent='';return}
+      const t=sp.t0+(sp.t1-sp.t0)*((x-sp.padL)/Math.max(1,sp.plotW));
+      let bar=null, bd=1e18;
+      for(const b of pack.bars){const d=Math.abs(b.time-t); if(d<bd){bd=d;bar=b}}
+      if(!bar) return;
+      let ath=0;
+      for(const b of pack.bars){ if(b.time>bar.time) break; if(b.close>ath) ath=b.close; }
+      const dd=ath?(bar.close/ath-1)*100:0;
+      const i=hit(ev);
+      const m=window.lastScout&&window.lastScout.market;
+      const px=typeof annualPriceLabel==='function'?annualPriceLabel(bar.close, m):String(bar.close);
+      const bits=[(typeof isoUTC==='function'?isoUTC(bar.time):''),'close '+px, 'DD '+dd.toFixed(1)+'%'];
+      if(i!=null&&i>=0) bits.push(pack.rows[i].periodLabel+' '+pack.rows[i].ddLabel);
+      $('legend').textContent=bits.join('  ·  ');
+    });
+    cnv.addEventListener('mouseleave',()=>{$('legend').textContent=''});
+    cnv.addEventListener('click',ev=>{
+      const i=hit(ev);
+      if(i!=null&&i>=0) select(i);
+    });
+  }
+  window.selectCorrection=select;
+}
+
+async function renderCorrectionsView(){
+  clearCharts();
+  document.body.classList.add('scout-view','scout-corrections');
+  $('charts').classList.remove('has-volume');
+  const m=typeof currentMarket==='function'?currentMarket():'combinedUSD';
+  const raw=await getDaily(m);
+  let daily=raw.map(toBar).filter(b=>b&&b.close>0);
+  if($('c')&&$('c').checked&&$('e')&&$('e').value){
+    const end=Date.parse($('e').value)/1000;
+    if(end) daily=daily.filter(b=>b.time<=end+12*3600);
+  }
+  const computed=computeMajorCorrections(daily,{market:m});
+  const title=correctionsTitle(m);
+  const pack=Object.assign({selected:0, market:m, title}, computed);
+  window.lastScout={kind:'corrections',market:m,rows:pack.rows,bars:pack.bars,pack,title,selected:0};
+  const main=$('main');
+  main.innerHTML='';
+  $('subs').innerHTML='';
+  if(typeof setEpochLegend==='function') setEpochLegend(false);
+  if(!pack.rows.length){
+    const msg=document.createElement('p');
+    msg.className='corrections-empty';
+    msg.textContent='No declines of 30% or more from a closing all-time high on this series (from September 2010).';
+    main.appendChild(msg);
+    status('No 30%+ closing corrections on '+(typeof marketLabel==='function'?marketLabel(m):m)+'.');
+    return;
+  }
+  const cur=pack.rows.find(r=>r.ongoing)||pack.rows[0];
+  const rec=pack.rows.find(r=>r.record);
+  status(pack.rows.length+' corrections of 30%+  ·  '+(typeof marketLabel==='function'?marketLabel(m):m)+
+    '  ·  current '+cur.ddLabel+' from ATH ('+cur.periodLabel+', '+cur.days+' days)'+
+    (rec?'  ·  longest '+rec.days+' days ('+rec.periodLabel.replace(' (ongoing)','')+')':''));
+  const note=$('sourceNote');
+  if(note){
+    const splice=(m==='combinedUSD'&&typeof SPLICE==='string')?(SPLICE+' '):'';
+    note.textContent=splice+'Daily closing prices (same convention as Drawdown from ATH), from September 2010. A correction runs from a closing all-time high to the lowest close before the next closing all-time high, and is kept if that drop is 30% or more. Chart idea: Charlie Bilello.';
+  }
+  const wrap=document.createElement('div');
+  wrap.innerHTML=correctionsTableHtml(title, pack);
+  $('subs').appendChild(wrap.firstChild);
+  const host=$('subs').querySelector('.corrections-wrap');
+  const painter=(ctx,w,h)=>{
+    paintCorrectionsSparkline(ctx,w,h,pack,{});
+  };
+  const attached=attachPaintCanvas(main, painter);
+  window._correctionsRedraw=attached&&attached.redraw;
+  bindCorrectionsInteractions(host, pack);
+}
+
+window.renderCorrectionsView=renderCorrectionsView;
+window.computeMajorCorrections=computeMajorCorrections;
+window.composeCorrectionsImage=composeCorrectionsImage;

@@ -202,6 +202,42 @@ html.dark table.annual-returns tr.up td.pct{background:#1b5e20;color:#c8e6c9}
 html.dark table.annual-returns tr.down td,html.dark table.annual-returns tr.down td.yr{color:#ef9a9a}
 html.dark table.annual-returns tr.down td.pct{background:#5d1a1a;color:#ffcdd2}
 .annual-returns-empty{padding:24px 16px;color:var(--muted);font-size:13px}
+body.scout-corrections #scaleToggle,body.scout-corrections #markerBox,body.scout-corrections #ratioBox,body.scout-corrections #ratioLogBox{display:none}
+body.scout-corrections #charts{display:flex;flex-direction:column}
+body.scout-corrections #subs{order:-1}
+body.scout-corrections #main{height:220px}
+body.scout-corrections #chartWatermark{bottom:36px;left:56px}
+.corrections-wrap{padding:14px 16px 10px;border-bottom:1px solid var(--chart-border,#ccc);background:var(--bg)}
+.corrections-title{margin:0 0 6px;font-size:16px;font-weight:bold;text-align:center;color:var(--fg)}
+.corrections-sub{margin:0 0 10px;font-size:11px;line-height:1.4;text-align:center;color:var(--muted)}
+.corrections-scroll{overflow-x:auto}
+table.corrections{width:100%;min-width:720px;border-collapse:collapse;font-size:12px}
+table.corrections th,table.corrections td{border:1px solid var(--table-border,#ccc);padding:5px 8px;text-align:right;white-space:nowrap}
+table.corrections th{background:var(--panel,#f6f6f6);font-weight:bold;white-space:normal;line-height:1.25}
+table.corrections th:first-child,table.corrections td.period{text-align:left;font-weight:bold}
+table.corrections tr.ongoing td.period{color:#e65100}
+table.corrections tr.record td{background:#fff3e0}
+table.corrections tr.record td.days{font-weight:bold;color:#e65100}
+table.corrections tr.on td.period{box-shadow:inset 3px 0 0 #f7931a}
+table.corrections td.dd{font-weight:bold}
+table.corrections tr[data-depth="0"] td.dd{background:#ffcdd2;color:#b71c1c}
+table.corrections tr[data-depth="1"] td.dd{background:#ef9a9a;color:#7f1111}
+table.corrections tr[data-depth="2"] td.dd{background:#e57373;color:#fff}
+table.corrections tr[data-depth="3"] td.dd{background:#c62828;color:#fff}
+table.corrections tr[data-depth="4"] td.dd,table.corrections tr[data-depth="5"] td.dd{background:#7f1111;color:#fff}
+table.corrections tbody tr{cursor:pointer}
+table.corrections tbody tr:hover td:not(.dd){background:#fafafa}
+.corrections-empty{padding:24px 16px;color:var(--muted);font-size:13px}
+html.dark table.corrections th{background:#1c1c1c}
+html.dark table.corrections tr.record td{background:rgba(247,147,26,0.16)}
+html.dark table.corrections tr.record td.days{color:#ffcc80}
+html.dark table.corrections tr.ongoing td.period{color:#ffcc80}
+html.dark table.corrections tr[data-depth="0"] td.dd{background:#5d1a1a;color:#ffcdd2}
+html.dark table.corrections tr[data-depth="1"] td.dd{background:#7a1d1d;color:#ffcdd2}
+html.dark table.corrections tr[data-depth="2"] td.dd{background:#8e2020;color:#ffebee}
+html.dark table.corrections tr[data-depth="3"] td.dd{background:#a31515;color:#fff}
+html.dark table.corrections tr[data-depth="4"] td.dd,html.dark table.corrections tr[data-depth="5"] td.dd{background:#4a0d0d;color:#fff}
+html.dark table.corrections tbody tr:hover td:not(.dd){background:#222}
 body.scout-neverdown #scaleToggle,body.scout-neverdown #markerBox,body.scout-neverdown #ratioBox,body.scout-neverdown #ratioLogBox{display:none}
 body.scout-neverdown #main{height:680px}
 body.scout-neverdown #chartWatermark{display:none}
@@ -366,6 +402,7 @@ body.page-v2 #viewToggle button:disabled{opacity:.45;cursor:not-allowed}
   body.page-v2.scout-ranges #main,
   body.page-v2.scout-annualreturns #main,
   body.page-v2.scout-neverdown #main{height:min(600px,85vh) !important}
+  body.page-v2.scout-corrections #main{height:min(240px,40vh) !important}
 }
 
 /* v2: keep Cycles and Spiral visible but disabled (with a tooltip) when the symbol is not Bitcoin. */

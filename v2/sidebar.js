@@ -47,6 +47,7 @@
       {id:'returns-mult', label:'Rolling 1-year multiple', set:{vt:'returns',rm:'mult',r:'',i:'Daily'}},
       {id:'calyear', label:'Calendar years', set:{vt:'calyear',ym:'raw',r:'',i:'Daily'}}
     ], extra:[
+      {id:'corrections', label:'Major corrections from ATHs', set:{vt:'corrections',r:'',i:'Daily'}},
       {id:'calyear-idx', label:'Calendar years, indexed', set:{vt:'calyear',ym:'idx',r:'',i:'Daily'}}
     ]},
     {name:'History', items:[
