@@ -64,7 +64,7 @@
       {id:'sma-osc', label:'MA percentile oscillator', set:{vt:'pricema',pma:'200d',pmm:'osc',r:'',i:'Daily'}}
     ]},
     {name:'Macro', items:[
-      {id:'btc-gold', label:'Bitcoin / Gold', set:{cm:'goldUSD',r:'',i:'Daily',t:'C',l:true}},
+      {id:'btc-gold', label:'Bitcoin / Gold', set:{vt:'btcgold',r:'',i:'Daily',t:'C',l:true}},
       {id:'btc-spx', label:'Bitcoin / S&P 500', set:{cm:'spx',r:'',i:'Daily',t:'C',l:true}},
       {id:'btc-cpi', label:'Bitcoin / CPI', set:{cm:'cpiAUCSL',r:'',i:'Daily',t:'C',l:true}},
       {id:'gold', label:'Gold', set:{m:'goldUSD',r:'',i:'Daily',t:'C',l:true}},

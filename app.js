@@ -3,7 +3,7 @@ const LW=LightweightCharts;
 
 const PUBLIC_CHART_BASE='https://chartsbtc.github.io/btccharts/';
 const ADVANCED_HASH_IDS=['cy','ll','pl','vt','rp','rpl','ep','ch','cl','hv','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','da','ca','cp','ym','otd','ott','rb','an','cm','rma','rme','el','ss','sp','sf','sh'];
-const VIEW_ALIASES={annualreturns:'annualreturns','200wnevrdown':'200wnevrdown',corrections:'corrections',assetreturns:'assetreturns'};
+const VIEW_ALIASES={annualreturns:'annualreturns','200wnevrdown':'200wnevrdown',corrections:'corrections',assetreturns:'assetreturns',btcgold:'btcgold'};
 function resolveHashAliases(hash){
   const raw=String(hash||'').replace(/^#/,'');
   // Short aliases such as #annualreturns are v2 entry points only, so a
@@ -154,6 +154,7 @@ function syncViewToggle(){
   document.body.classList.toggle('scout-neverdown',vt==='200wnevrdown' && !on);
   document.body.classList.toggle('scout-corrections',vt==='corrections' && !on);
   document.body.classList.toggle('scout-assetreturns',vt==='assetreturns' && !on);
+  document.body.classList.toggle('scout-btcgold',vt==='btcgold' && !on);
   if(vt==='onthisday' && typeof syncOnThisDayUi==='function') syncOnThisDayUi();
   document.body.classList.toggle('mode-mult',vt==='returns' && ($('rm')&&$('rm').value==='mult') && !on);
   document.querySelectorAll('#viewToggle button').forEach(b=>b.classList.toggle('on',(b.dataset.cy==='1')===on && !vt));
@@ -177,7 +178,7 @@ function syncViewToggle(){
 }
 
 
-const V2_LONG_VIEWS={powerlaw:1,drawdown:1,ath:1,sats:1,pricema:1,returns:1,epoch:1,calyear:1,onthisday:1,hcycles:1,ranges:1,spiral:1,annualreturns:1,'200wnevrdown':1,corrections:1,assetreturns:1,cycles:1};
+const V2_LONG_VIEWS={powerlaw:1,drawdown:1,ath:1,sats:1,pricema:1,returns:1,epoch:1,calyear:1,onthisday:1,hcycles:1,ranges:1,spiral:1,annualreturns:1,'200wnevrdown':1,corrections:1,assetreturns:1,btcgold:1,cycles:1};
 let v2LastMode={vt:'',cy:false}, v2PriceWindow=null;
 function v2IsLong(vt,cy){return !!(cy||V2_LONG_VIEWS[vt||''] )}
 function v2IsPriceDefaultWindow(){return !$('c').checked && $('r') && $('r').value==='60'}
@@ -252,6 +253,13 @@ function applyV2PermalinkDefaults(){
   if($('c')&&$('c').checked) return;
   if(!v2ParsedHashIds.has('i')&&$('i')) $('i').value='Daily';
   if(!v2ParsedHashIds.has('r')&&$('r')) $('r').value='';
+  if(vt==='btcgold' && !v2ParsedHashIds.has('l') && !v2ParsedHashIds.has('p') && !v2ParsedHashIds.has('ll') && !v2ParsedHashIds.has('da')){
+    if($('l')) $('l').checked=true;
+    if($('p')) $('p').checked=false;
+    if($('ll')) $('ll').checked=false;
+    if($('da')) $('da').checked=false;
+    if(typeof syncScaleToggle==='function') syncScaleToggle();
+  }
 }
 function refreshV2DailyScoutStatus(rows){
   if(typeof isV2Page!=='function'||!isV2Page()) return;
@@ -287,10 +295,11 @@ function syncV2Ui(){
   const btc=typeof isBtcMarket!=='function'||isBtcMarket(typeof currentMarket==='function'?currentMarket():'combinedUSD');
   const usesBars=scout&&(vt==='powerlaw'||vt==='drawdown'||vt==='ath'||vt==='sats');
   const usesWindowDaily=scout&&(vt==='pricema'||vt==='returns'||vt==='epoch');
-  const showWindow=price||ll||usesBars||usesWindowDaily;
+  const isBtcGold=scout&&vt==='btcgold';
+  const showWindow=price||ll||usesBars||usesWindowDaily||isBtcGold;
   const showInterval=price||ll||usesBars;
-  const showStyle=price;
-  const showScale=price||ll||cy;
+  const showStyle=price||isBtcGold;
+  const showScale=price||ll||cy||isBtcGold;
   const cmp=!!(typeof currentCompare==='function'&&currentCompare()) && price;
   const showLoglog=showScale&&btc&&!cmp&&!cy;
   const showPct=price&&!cmp;
@@ -715,7 +724,7 @@ function drawPowerLawUplot(u,xs,barAt){
 }
 
 let plSeries={};
-function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if(typeof clearScoutPlots==='function')clearScoutPlots();if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view','scout-view','scout-powerlaw','scout-drawdown','scout-ath','scout-sats','scout-pricema','scout-osc','scout-returns','mode-mult','scout-blend','scout-epoch','scout-calyear','scout-onthisday','has-otd-table','scout-hcycles','scout-ranges','scout-spiral','scout-annualreturns','scout-neverdown','scout-corrections','scout-assetreturns');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null;if($('plLegend')&&!($('pl')&&$('pl').checked)){$('plLegend').hidden=true;$('plLegend').textContent=''}}
+function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if(typeof clearScoutPlots==='function')clearScoutPlots();if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view','scout-view','scout-powerlaw','scout-drawdown','scout-ath','scout-sats','scout-pricema','scout-osc','scout-returns','mode-mult','scout-blend','scout-epoch','scout-calyear','scout-onthisday','has-otd-table','scout-hcycles','scout-ranges','scout-spiral','scout-annualreturns','scout-neverdown','scout-corrections','scout-assetreturns','scout-btcgold');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null;if($('plLegend')&&!($('pl')&&$('pl').checked)){$('plLegend').hidden=true;$('plLegend').textContent=''}}
 
 
 function macroSourceCredit(m,cm){
@@ -1354,7 +1363,7 @@ function clear_table(){
   if($('loadRaw')) $('loadRaw').textContent='Show data';
 }
 function showTable(){
-  if($('cy').checked) fillCycleTable(); else if(typeof scoutView==='function'&&scoutView()==='powerlaw') fillPowerLawTable(); else if(scoutView()==='drawdown') fillDrawdownTable(); else if(scoutView()==='ath') fillAthTable(); else if(scoutView()==='sats') fillSatsTable(); else if(scoutView()==='pricema') fillPriceMaTable(); else if(scoutView()==='returns') fillReturnsTable(); else if(scoutView()==='epoch') fillEpochTable(); else if(scoutView()==='calyear') fillCalYearTable(); else if(scoutView()==='onthisday') fillOnThisDayTable(); else if(scoutView()==='hcycles') fillHcyclesTable(); else if(scoutView()==='ranges') fillRangesTable(); else if(scoutView()==='annualreturns') fillAnnualReturnsTable(); else if(scoutView()==='200wnevrdown') fillNeverDownTable(); else if(scoutView()==='corrections') fillCorrectionsTable(); else if(scoutView()==='assetreturns') fillAssetReturnsTable(); else fillPriceTable();
+  if($('cy').checked) fillCycleTable(); else if(typeof scoutView==='function'&&scoutView()==='powerlaw') fillPowerLawTable(); else if(scoutView()==='drawdown') fillDrawdownTable(); else if(scoutView()==='ath') fillAthTable(); else if(scoutView()==='sats') fillSatsTable(); else if(scoutView()==='pricema') fillPriceMaTable(); else if(scoutView()==='returns') fillReturnsTable(); else if(scoutView()==='epoch') fillEpochTable(); else if(scoutView()==='calyear') fillCalYearTable(); else if(scoutView()==='onthisday') fillOnThisDayTable(); else if(scoutView()==='hcycles') fillHcyclesTable(); else if(scoutView()==='ranges') fillRangesTable(); else if(scoutView()==='annualreturns') fillAnnualReturnsTable(); else if(scoutView()==='200wnevrdown') fillNeverDownTable(); else if(scoutView()==='corrections') fillCorrectionsTable(); else if(scoutView()==='assetreturns') fillAssetReturnsTable(); else if(scoutView()==='btcgold') fillBtcGoldTable(); else fillPriceTable();
   tableOpen=true;
   $('tableWrap').hidden=false;
   $('downloadCsv').hidden=false;
@@ -1470,6 +1479,25 @@ function fillAssetReturnsTable(){
   const rows=[];
   for(const a of (pack.assets||[])){
     const rec=[a.name, fmt(a.ytd), fmt(a.cum,true), fmt(a.ann)].concat(years.map(y=>fmt(a.cells[y])));
+    tableCsv.push(rec);
+    rows.push('<tr>'+rec.map(c=>'<td>'+c+'</td>').join('')+'</tr>');
+  }
+  $('chart_table').tBodies[0].innerHTML=rows.join('');
+}
+function fillBtcGoldTable(){
+  const pts=((window.lastScout||{}).pack||{}).pts||[];
+  const head=['Date','BTC','Gold (USD/oz)','oz gold / BTC','200-day MA'];
+  setTableHead(head); tableCsv=[head.slice()];
+  const rows=[];
+  const fmtOz=typeof formatOz==='function'?formatOz:(v=>v==null?'':String(v));
+  for(const p of pts.slice().reverse()){
+    const rec=[
+      typeof isoUTC==='function'?isoUTC(p.time):String(p.time),
+      String(p.btc),
+      String(p.gold),
+      fmtOz(p.close),
+      p.ma200!=null?fmtOz(p.ma200):''
+    ];
     tableCsv.push(rec);
     rows.push('<tr>'+rec.map(c=>'<td>'+c+'</td>').join('')+'</tr>');
   }
@@ -1651,7 +1679,7 @@ function isMobileUa(){
 }
 function chartTitleLine(){
   const vt=($('vt')&&$('vt').value)||'';
-  if(vt==='powerlaw'||vt==='drawdown'||vt==='ath'||vt==='sats'||vt==='pricema'||vt==='returns'||vt==='epoch'||vt==='calyear'||vt==='onthisday'||vt==='hcycles'||vt==='ranges'||vt==='spiral'||vt==='annualreturns'||vt==='200wnevrdown'||vt==='corrections'||vt==='assetreturns'){
+  if(vt==='powerlaw'||vt==='drawdown'||vt==='ath'||vt==='sats'||vt==='pricema'||vt==='returns'||vt==='epoch'||vt==='calyear'||vt==='onthisday'||vt==='hcycles'||vt==='ranges'||vt==='spiral'||vt==='annualreturns'||vt==='200wnevrdown'||vt==='corrections'||vt==='assetreturns'||vt==='btcgold'){
     const m=currentMarket();
     const name=m==='combinedUSD'?'BTC/USD Combined':('BTC/USD '+marketLabel(m).replace(/ \(USD\)/,''));
     if(vt==='ranges'){
@@ -1675,6 +1703,9 @@ function chartTitleLine(){
     if(vt==='assetreturns'){
       const s=window.lastScout||{};
       return s.title||'Asset Class Total Returns Since 2011';
+    }
+    if(vt==='btcgold'){
+      return 'Bitcoin priced in gold (oz gold per BTC)';
     }
     if(vt==='hcycles'){
       return name+' · Halving cycles (USD)';
@@ -2079,6 +2110,14 @@ function shareCaption(){
     if(gld) bits.push('Gold '+(typeof formatAssetPct==='function'?formatAssetPct(gld.ytd):'')+' YTD');
     if(pack.btcAsOf||pack.asOf) bits.push('as of '+(pack.btcAsOf||pack.asOf));
     bits.push('Chart idea: Charlie Bilello');
+    return bits.join('. ')+'.';
+  }
+  if(vt==='btcgold'){
+    bits.push('Bitcoin priced in gold, ounces of gold per bitcoin');
+    const last=(window.lastScout||{}).last||(((window.lastScout||{}).pack||{}).pts||[]).at(-1);
+    if(last) bits.push(formatOz(last.close)+' oz gold per BTC on '+(typeof isoUTC==='function'?isoUTC(last.time):''));
+    bits.push('Gold is COMEX continuous futures (Yahoo GC=F)');
+    bits.push('Chart idea: @DzambhalaHODL');
     return bits.join('. ')+'.';
   }
   if(vt==='200wnevrdown'){

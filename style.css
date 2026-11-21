@@ -252,6 +252,17 @@ table.asset-returns tfoot td .fn{display:block;font-weight:bold}
 table.asset-returns tfoot td .fv{display:block}
 table.asset-returns tfoot td.asset{background:var(--panel,#f6f6f6)}
 .asset-returns-empty{padding:24px 16px;color:var(--muted);font-size:13px}
+body.scout-btcgold #markerBox,body.scout-btcgold #ratioBox,body.scout-btcgold #ratioLogBox{display:none}
+body.page-v2.scout-btcgold #v2StyleGroup .v2-ma,
+body.page-v2.scout-btcgold #v2StyleGroup .v2-ind{display:none !important}
+body.scout-btcgold #main{height:520px}
+.btcgold-tools{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:8px 12px;border-bottom:1px solid var(--chart-border,#ccc);background:var(--bg)}
+.btcgold-presets{display:flex;gap:4px}
+.btcgold-presets button{font:bold 11px Verdana,Arial,sans-serif;padding:6px 12px;min-height:32px;cursor:pointer;border:1px solid #f7931a;background:var(--seg-bg,#fff);color:var(--seg-fg,#333);border-radius:4px}
+.btcgold-presets button.on{background:#f7931a;color:#fff}
+.btcgold-ma{font-size:12px;color:var(--fg)}
+.btcgold-now{font-size:13px;font-weight:bold;color:var(--fg);margin-left:auto}
+.btcgold-empty{padding:24px 16px;color:var(--muted);font-size:13px}
 html.dark table.asset-returns th,html.dark table.asset-returns tfoot td,html.dark table.asset-returns tfoot td.asset{background:#1c1c1c}
 html.dark table.asset-returns th.asset,html.dark table.asset-returns td.asset{background:#111}
 html.dark table.asset-returns td.pct.up{background:#1b5e20;color:#c8e6c9}
@@ -431,6 +442,7 @@ body.page-v2 #viewToggle button:disabled{opacity:.45;cursor:not-allowed}
   body.page-v2.scout-annualreturns #main,
   body.page-v2.scout-neverdown #main{height:min(600px,85vh) !important}
   body.page-v2.scout-corrections #main{height:min(240px,40vh) !important}
+  body.page-v2.scout-btcgold #main{height:min(600px,85vh) !important}
 }
 
 /* v2: keep Cycles and Spiral visible but disabled (with a tooltip) when the symbol is not Bitcoin. */

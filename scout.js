@@ -1080,6 +1080,10 @@ async function renderScout(kind){
     if(typeof isV2Page==='function'&&!isV2Page()) return false;
     await renderAssetReturnsView();return true
   }
+  if(kind==='btcgold'){
+    if(typeof isV2Page==='function'&&!isV2Page()) return false;
+    await renderBtcGoldView();return true
+  }
   if(kind==='200wnevrdown'){
     if(typeof isV2Page==='function'&&!isV2Page()) return false;
     await renderNeverDownView();return true
@@ -4394,3 +4398,205 @@ window.renderAssetReturnsView=renderAssetReturnsView;
 window.computeAssetReturns=computeAssetReturns;
 window.composeAssetReturnsImage=composeAssetReturnsImage;
 window.formatAssetPct=formatAssetPct;
+
+const BTCGOLD_START=Date.UTC(2011,0,1)/1000;
+function smaOf(values, n){
+  const out=new Array(values.length).fill(null);
+  let sum=0, q=[];
+  for(let i=0;i<values.length;i++){
+    const v=values[i];
+    if(v==null||!isFinite(v)){sum=0;q=[];continue}
+    q.push(v); sum+=v;
+    if(q.length>n) sum-=q.shift();
+    if(q.length===n) out[i]=sum/n;
+  }
+  return out;
+}
+function formatOz(v){
+  if(v==null||!isFinite(v)) return '';
+  const abs=Math.abs(v);
+  if(abs>=100) return (Math.round(v*10)/10).toFixed(1);
+  if(abs>=10) return (Math.round(v*100)/100).toFixed(2);
+  return (Math.round(v*1000)/1000).toFixed(3);
+}
+function computeBtcGold(btcDaily, goldRows, opts){
+  opts=opts||{};
+  const start=opts.startTime!=null?opts.startTime:BTCGOLD_START;
+  const end=opts.endTime||null;
+  const times=btcDaily.map(b=>b.time);
+  const goldCloses=typeof locfAlignCloses==='function'
+    ? locfAlignCloses(goldRows, times, {extend:true})
+    : [];
+  const pts=[];
+  for(let i=0;i<btcDaily.length;i++){
+    const b=btcDaily[i], g=goldCloses[i];
+    if(!b||!(b.close>0)||!(g>0)) continue;
+    const oz=b.close/g;
+    pts.push({
+      time:b.time,
+      gold:g,
+      btc:b.close,
+      oz,
+      open:(b.open>0?b.open:b.close)/g,
+      high:(b.high>0?b.high:b.close)/g,
+      low:(b.low>0?b.low:b.close)/g,
+      close:oz
+    });
+  }
+  const ma=smaOf(pts.map(p=>p.close), 200);
+  pts.forEach((p,i)=>{p.ma200=ma[i]});
+  const shown=pts.filter(p=>p.time>=start && (!end || p.time<=end));
+  return {pts:shown, all:pts, start, end};
+}
+function btcGoldWindow(){
+  const now=Math.floor(Date.now()/1000);
+  if($('c')&&$('c').checked){
+    const s=$('s')&&$('s').value?Date.parse($('s').value)/1000:BTCGOLD_START;
+    const e=$('e')&&$('e').value?Date.parse($('e').value)/1000+86400:now;
+    return {start:s, end:e};
+  }
+  const r=$('r')&&$('r').value;
+  if(r&&!isNaN(+r)&&+r>0){
+    return {start:now-(+r)*86400, end:now};
+  }
+  return {start:BTCGOLD_START, end:now};
+}
+function renderBtcGoldPresets(host){
+  const bar=document.createElement('div');
+  bar.className='btcgold-tools';
+  bar.innerHTML=
+    '<div class="btcgold-presets" role="group" aria-label="Range">'+
+      '<button type="button" data-bg-r="7">1W</button>'+
+      '<button type="button" data-bg-r="30">1M</button>'+
+      '<button type="button" data-bg-r="360">1Y</button>'+
+      '<button type="button" data-bg-r="">All</button>'+
+    '</div>'+
+    '<label class="btcgold-ma"><input type="checkbox" id="bgMa" checked> 200-day MA</label>'+
+    '<span class="btcgold-now" id="bgNow"></span>';
+  host.appendChild(bar);
+  const cur=$('r')?$('r').value:'';
+  bar.querySelectorAll('[data-bg-r]').forEach(btn=>{
+    const v=btn.getAttribute('data-bg-r');
+    if(v===cur || (v==='' && !cur)) btn.classList.add('on');
+    btn.addEventListener('click',()=>{
+      if($('c')) $('c').checked=false;
+      if($('r')) $('r').value=v;
+      if(typeof syncCustom==='function') syncCustom();
+      if(typeof draw==='function') draw(1);
+    });
+  });
+  const ma=$('bgMa');
+  if(ma){
+    const prev=window.lastScout&&window.lastScout.kind==='btcgold'?window.lastScout.showMa:true;
+    ma.checked=prev!==false;
+    ma.addEventListener('change',()=>{
+      if(window.lastScout&&window.lastScout.kind==='btcgold') window.lastScout.showMa=ma.checked;
+      if(typeof draw==='function') draw(0);
+    });
+  }
+}
+async function renderBtcGoldView(){
+  clearCharts();
+  document.body.classList.add('scout-view','scout-btcgold');
+  $('charts').classList.remove('has-volume');
+  const m=typeof currentMarket==='function'?currentMarket():'combinedUSD';
+  const btcMarket=(typeof isBtcMarket==='function'&&isBtcMarket(m))?m:'combinedUSD';
+  let btc=[], goldRows=[];
+  try{
+    const raw=await getDaily(btcMarket);
+    btc=raw.map(toBar).filter(b=>b&&b.close>0);
+  }catch(e){status('Error loading Bitcoin history: '+e.message);return}
+  try{
+    goldRows=await getDaily('goldUSD');
+  }catch(e){status('Error loading gold history: '+e.message);return}
+  const win=btcGoldWindow();
+  const pack=computeBtcGold(btc, goldRows, {startTime:win.start, endTime:win.end});
+  const prev=window.lastScout;
+  const showMa=prev&&prev.kind==='btcgold'?prev.showMa!==false:true;
+  const last=pack.pts.at(-1);
+  const title='Bitcoin priced in gold (oz gold per BTC)';
+  window.lastScout={kind:'btcgold', market:btcMarket, pack, title, showMa, last};
+  const main=$('main');
+  main.innerHTML='';
+  $('subs').innerHTML='';
+  if(typeof setEpochLegend==='function') setEpochLegend(false);
+  renderBtcGoldPresets($('subs'));
+  if(!pack.pts.length){
+    const msg=document.createElement('p');
+    msg.className='btcgold-empty';
+    msg.textContent='Not enough overlapping Bitcoin and gold history in this window.';
+    main.appendChild(msg);
+    status('Not enough Bitcoin / gold overlap.');
+    return;
+  }
+  const useLog=!($('l')) || $('l').checked;
+  if($('p')) $('p').checked=false;
+  if($('ll')) $('ll').checked=false;
+  const tVal=$('t')?$('t').value:'C';
+  const asLine=!(tVal==='S'||tVal==='B'||tVal==='Heikin-Ashi'||tVal==='HL');
+  const ozFmt={type:'custom', minMove:0.01, formatter:v=>formatOz(v)+' oz'};
+  const ch=mkChart(main,{localization:{priceFormatter:v=>formatOz(v)+' oz'}});
+  charts.push(ch);
+  ch.priceScale('right').applyOptions({
+    mode:useLog?LW.PriceScaleMode.Logarithmic:LW.PriceScaleMode.Normal,
+    scaleMargins:{top:.08,bottom:.08},
+    autoScale:true
+  });
+  if(!asLine){
+    const ser=ch.addCandlestickSeries({
+      upColor:'#2e7d32', downColor:'#c62828',
+      borderUpColor:'#2e7d32', borderDownColor:'#c62828',
+      wickUpColor:'#2e7d32', wickDownColor:'#c62828',
+      priceLineVisible:false, lastValueVisible:true,
+      title:'oz / BTC',
+      priceFormat:ozFmt
+    });
+    ser.setData(pack.pts.map(p=>({time:p.time, open:p.open, high:Math.max(p.high,p.open,p.close), low:Math.min(p.low,p.open,p.close), close:p.close})));
+  }else{
+    const ser=ch.addLineSeries({
+      color:'#f7931a', lineWidth:2, priceLineVisible:false, lastValueVisible:true,
+      title:'oz / BTC', priceFormat:ozFmt
+    });
+    ser.setData(pack.pts.map(p=>({time:p.time, value:p.close})));
+  }
+  if(showMa){
+    const maPts=pack.pts.filter(p=>p.ma200!=null).map(p=>({time:p.time, value:p.ma200}));
+    if(maPts.length){
+      const ma=ch.addLineSeries({
+        color:'#1565c0', lineWidth:1.5, priceLineVisible:false, lastValueVisible:false,
+        title:'200d MA', priceFormat:ozFmt
+      });
+      ma.setData(maPts);
+    }
+  }
+  hookLegend(ch, t=>{
+    const p=pack.pts.find(x=>x.time===t);
+    if(!p) return '';
+    const bits=[(typeof isoUTC==='function'?isoUTC(p.time):''), formatOz(p.close)+' oz / BTC'];
+    if(typeof annualPriceLabel==='function'){
+      bits.push('BTC '+annualPriceLabel(p.btc, btcMarket));
+      bits.push('Gold $'+Math.round(p.gold).toLocaleString('en-US'));
+    }
+    if(p.ma200!=null) bits.push('200d MA '+formatOz(p.ma200)+' oz');
+    return bits.join('  ·  ');
+  });
+  if(ch.timeScale){
+    ch.timeScale().fitContent();
+    setTimeout(()=>ch.timeScale().fitContent(),50);
+  }
+  const nowEl=$('bgNow');
+  if(nowEl&&last){
+    nowEl.textContent='Now '+formatOz(last.close)+' oz gold / BTC'+(last.ma200!=null?('  ·  200d MA '+formatOz(last.ma200)+' oz'):'');
+  }
+  const maTxt=pack.pts.at(-1)&&pack.pts.at(-1).ma200!=null?('  ·  200d MA '+formatOz(pack.pts.at(-1).ma200)+' oz'):'';
+  status(formatOz(last.close)+' oz gold / BTC  ·  BTC '+(typeof annualPriceLabel==='function'?annualPriceLabel(last.btc,btcMarket):last.btc)+'  ·  gold $'+Math.round(last.gold).toLocaleString('en-US')+'  ·  '+ (typeof isoUTC==='function'?isoUTC(last.time):'') + maTxt);
+  const note=$('sourceNote');
+  if(note){
+    const splice=(btcMarket==='combinedUSD'&&typeof SPLICE==='string')?(SPLICE+' '):'';
+    note.textContent=splice+'Ratio is the Bitcoin daily close divided by the COMEX gold continuous futures close (Yahoo GC=F, the site’s goldUSD series), in ounces of gold per bitcoin. Gold is last-observation-carried-forward onto Bitcoin dates (weekends and holidays). Default range is 2011 to now. Chart idea: @DzambhalaHODL.';
+  }
+}
+
+window.renderBtcGoldView=renderBtcGoldView;
+window.computeBtcGold=computeBtcGold;
+window.formatOz=formatOz;

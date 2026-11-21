@@ -247,7 +247,7 @@ Refresh: `python3 fetch_macro.py --only spxShiller`.
 
 Refresh date: 2026-11-12, early morning America/Los_Angeles. US equities and
 indexes last complete bar is **2026-11-11** (the cash session had not opened
-yet). COMEX gold (`GC=F`) already has a **2026-11-12** bar. That date mismatch
+yet). COMEX gold (`GC=F`) already has a **2026-11-20** bar. That date mismatch
 is expected, not a gap.
 
 This host's IP was HTTP 429 from Yahoo during the first pull, so the Yahoo
@@ -258,7 +258,7 @@ chunks, 10–30 minute 429 backoff, and a pause between symbols.
 
 | id | start | end | rows | bytes |
 | --- | --- | --- | ---: | ---: |
-| `goldUSD` | 2000-08-30 | 2026-11-12 | 6,577 | 524,852 |
+| `goldUSD` | 2000-08-30 | 2026-11-20 | 6,583 | 525,358 |
 | `goldLBMA` | 1833-01-01 | 2026-10-01 | 2,326 | 96,192 |
 | `spx` | 1927-12-30 | 2026-11-11 | 24,834 | 2,315,715 |
 | `spxShiller` | 1871-01-01 | 2026-09-01 | 1,869 | 78,399 |
@@ -293,8 +293,8 @@ Sanity checks on this refresh:
 - GOOGL 1.998:1 (2014-04-03, Class C issuance) and 20:1 (2022-07-18): same.
 - MSFT last split 2003-02-18 2:1, also continuous on the adjusted file.
 - META has no split events; raw equals quote OHLC.
-- Gold 2011-08-22 close 1,888.70; 2020-08-06 close 2,069.40; 2026-11-12
-  close 3,931.90.
+- Gold 2011-08-22 close 1,888.70; 2020-08-06 close 2,069.40; 2026-11-20
+  close 3,515.40. The 2026-11-12 cache bar was a partial session print (close 3,931.90) and was replaced with the official session close 3,885.30 when the series was topped up through 2026-11-20.
 - CPI-U values match the published BLS prints listed in the CPI sections.
 
 ## etf_weekly — SPY, QQQ, GLD, AGG, TLT weekly total return (Yahoo)
