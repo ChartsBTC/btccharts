@@ -2093,9 +2093,15 @@ function shareCaption(){
     const rows=s.rows||[];
     bits.push(rows.length+' corrections');
     const cur=rows.find(r=>r.ongoing)||rows[0];
-    if(cur) bits.push('current '+cur.ddLabel+' from the '+cur.highLabel+' high on '+(typeof isoUTC==='function'?isoUTC(cur.peakTime):'')+', trough '+cur.lowLabel+', '+cur.days+' days');
-    const rec=rows.find(r=>r.record);
-    if(rec) bits.push('longest '+rec.days+' days ('+rec.periodLabel.replace(' (ongoing)','')+')');
+    if(cur) bits.push('current '+cur.ddLabel+' from the '+cur.highLabel+' high on '+(typeof isoUTC==='function'?isoUTC(cur.peakTime):'')+', trough '+cur.lowLabel+', '+cur.days+' days'+(cur.ongoing?' from the peak to now':''));
+    const recs=rows.filter(r=>r.record);
+    const completed=rows.filter(r=>!r.ongoing && r.record);
+    if(cur&&cur.ongoing&&cur.record&&completed.length){
+      if(cur.days===completed[0].days) bits.push('tied for longest with '+completed.map(r=>r.periodLabel+' ('+r.days+' days)').join(' and '));
+      else bits.push('longest on record, ahead of '+completed.map(r=>r.periodLabel+' ('+r.days+' days)').join(' and '));
+    }else if(recs.length){
+      bits.push('longest '+recs.map(r=>r.days+' days ('+r.periodLabel+')').join(', '));
+    }
     bits.push('Chart idea: Charlie Bilello');
     return bits.join('. ')+'.';
   }

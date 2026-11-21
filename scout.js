@@ -3673,11 +3673,13 @@ function computeMajorCorrections(daily, opts){
     const dd=(trough.close/peak.close-1)*100;
     if(dd>-30) return;
     const ret=(peak.close/trough.close-1)*100;
-    const days=daysBetweenUtc(peak.time, trough.time);
+    const lastBar=bars[bars.length-1]||trough;
+    const days=daysBetweenUtc(peak.time, (ongoing&&lastBar?lastBar.time:trough.time));
     const recovDays=(!ongoing&&newHighBar)?daysBetweenUtc(peak.time, newHighBar.time):null;
     rows.push({
       peakTime:peak.time,
       troughTime:trough.time,
+      lastTime:ongoing&&lastBar?lastBar.time:null,
       newHighTime:ongoing||!newHighBar?null:newHighBar.time,
       high:peak.close,
       low:trough.close,
@@ -3686,7 +3688,9 @@ function computeMajorCorrections(daily, opts){
       days,
       recovDays,
       ongoing:!!ongoing,
-      periodLabel:formatCorrDate(peak.time)+' – '+formatCorrDate(trough.time)+(ongoing?' (ongoing)':''),
+      periodLabel:ongoing
+        ? formatCorrDate(peak.time)+' – now (low '+formatCorrDate(trough.time)+')'
+        : formatCorrDate(peak.time)+' – '+formatCorrDate(trough.time),
       highLabel:typeof annualPriceLabel==='function'?annualPriceLabel(peak.close, market):String(Math.round(peak.close)),
       lowLabel:typeof annualPriceLabel==='function'?annualPriceLabel(trough.close, market):String(Math.round(trough.close)),
       ddLabel:typeof formatAnnualPct==='function'?formatAnnualPct(dd):(Math.round(dd)+'%'),
@@ -3708,12 +3712,39 @@ function computeMajorCorrections(daily, opts){
   closeRow(null, true);
   // newest first
   rows.reverse();
-  let recordDays=0;
-  for(const r of rows) if(r.days>recordDays) recordDays=r.days;
-  for(const r of rows) r.record=recordDays>0 && r.days===recordDays;
-  return {rows, bars, recordDays, start};
+  let completedMax=0;
+  for(const r of rows) if(!r.ongoing && r.days>completedMax) completedMax=r.days;
+  let recordDays=completedMax;
+  for(const r of rows){
+    if(r.ongoing){
+      r.record=completedMax>0 && r.days>=completedMax;
+      if(r.days>recordDays) recordDays=r.days;
+    }else{
+      r.record=completedMax>0 && r.days===completedMax;
+    }
+  }
+  return {rows, bars, recordDays, completedMax, start};
 }
 
+function correctionsStatusLine(pack, market){
+  const who=typeof marketLabel==='function'?marketLabel(market):market;
+  const rows=pack.rows||[];
+  const cur=rows.find(r=>r.ongoing)||rows[0];
+  let prev=null, prevDays=0;
+  for(const r of rows) if(!r.ongoing && r.days>=prevDays){prevDays=r.days; prev=r}
+  const curBit=cur&&cur.ongoing
+    ? 'current '+cur.ddLabel+' from ATH, '+cur.days+' days from '+formatCorrDate(cur.peakTime)+' to now (low '+formatCorrDate(cur.troughTime)+')'
+    : 'current '+cur.ddLabel+' from ATH ('+cur.periodLabel+', '+cur.days+' days)';
+  let line=rows.length+' corrections of 30%+  ·  '+who+'  ·  '+curBit;
+  if(cur&&cur.ongoing&&prev){
+    if(cur.days===prev.days) line+='  ·  tied for longest with '+prev.periodLabel+' ('+prev.days+' days)';
+    else if(cur.days>prev.days) line+='  ·  longest on record, ahead of '+prev.periodLabel+' ('+prev.days+' days)';
+    else line+='  ·  longest '+prev.days+' days ('+prev.periodLabel+')';
+  }else if(prev){
+    line+='  ·  longest '+prev.days+' days ('+prev.periodLabel+')';
+  }
+  return line;
+}
 function correctionsTitle(market){
   const btc=!market||typeof isBtcMarket!=='function'||isBtcMarket(market);
   const who=btc?'Bitcoin':((typeof shortMarketLabel==='function'?shortMarketLabel(market):null)||(typeof marketLabel==='function'?marketLabel(market):'Series'));
@@ -3748,7 +3779,7 @@ function correctionsTableHtml(title, pack){
   }).join('');
   return '<div class="corrections-wrap">'+
     '<h3 class="corrections-title">'+title+'</h3>'+
-    '<p class="corrections-sub">Every decline of 30% or more from a closing all-time high, September 2010 to now. High, low and drawdown use daily closes, the same as Drawdown from ATH. Newest first.</p>'+
+    '<p class="corrections-sub">Every decline of 30% or more from a closing all-time high, September 2010 to now. High, low and drawdown use daily closes, the same as Drawdown from ATH. For an open correction, # Days is counted from the peak to the latest close, because the trough is not confirmed until a new all-time high. Newest first.</p>'+
     '<div class="corrections-scroll"><table class="corrections"><thead><tr>'+
     '<th>Correction Period</th><th># Days</th><th>High</th><th>Low</th><th>% Decline</th>'+
     '<th>% Return to New High</th><th>New High Date</th><th># Days Prior High to New High</th>'+
@@ -4029,15 +4060,11 @@ async function renderCorrectionsView(){
     status('No 30%+ closing corrections on '+(typeof marketLabel==='function'?marketLabel(m):m)+'.');
     return;
   }
-  const cur=pack.rows.find(r=>r.ongoing)||pack.rows[0];
-  const rec=pack.rows.find(r=>r.record);
-  status(pack.rows.length+' corrections of 30%+  ·  '+(typeof marketLabel==='function'?marketLabel(m):m)+
-    '  ·  current '+cur.ddLabel+' from ATH ('+cur.periodLabel+', '+cur.days+' days)'+
-    (rec?'  ·  longest '+rec.days+' days ('+rec.periodLabel.replace(' (ongoing)','')+')':''));
+  status(correctionsStatusLine(pack, m));
   const note=$('sourceNote');
   if(note){
     const splice=(m==='combinedUSD'&&typeof SPLICE==='string')?(SPLICE+' '):'';
-    note.textContent=splice+'Daily closing prices (same convention as Drawdown from ATH), from September 2010. A correction runs from a closing all-time high to the lowest close before the next closing all-time high, and is kept if that drop is 30% or more. Chart idea: Charlie Bilello.';
+    note.textContent=splice+'Daily closing prices (same convention as Drawdown from ATH), from September 2010. A correction runs from a closing all-time high to the lowest close before the next closing all-time high, and is kept if that drop is 30% or more. For an open correction, # Days is measured from the peak to the latest close, because the trough is not confirmed until a new all-time high. Chart idea: Charlie Bilello.';
   }
   const wrap=document.createElement('div');
   wrap.innerHTML=correctionsTableHtml(title, pack);
@@ -4539,8 +4566,10 @@ async function renderBtcGoldView(){
   charts.push(ch);
   ch.priceScale('right').applyOptions({
     mode:useLog?LW.PriceScaleMode.Logarithmic:LW.PriceScaleMode.Normal,
-    scaleMargins:{top:.08,bottom:.08},
-    autoScale:true
+    scaleMargins:{top:.14,bottom:.08},
+    autoScale:true,
+    minimumWidth:84,
+    entireTextOnly:true
   });
   if(!asLine){
     const ser=ch.addCandlestickSeries({
@@ -4548,14 +4577,14 @@ async function renderBtcGoldView(){
       borderUpColor:'#2e7d32', borderDownColor:'#c62828',
       wickUpColor:'#2e7d32', wickDownColor:'#c62828',
       priceLineVisible:false, lastValueVisible:true,
-      title:'oz / BTC',
+      title:'',
       priceFormat:ozFmt
     });
     ser.setData(pack.pts.map(p=>({time:p.time, open:p.open, high:Math.max(p.high,p.open,p.close), low:Math.min(p.low,p.open,p.close), close:p.close})));
   }else{
     const ser=ch.addLineSeries({
       color:'#f7931a', lineWidth:2, priceLineVisible:false, lastValueVisible:true,
-      title:'oz / BTC', priceFormat:ozFmt
+      title:'', priceFormat:ozFmt
     });
     ser.setData(pack.pts.map(p=>({time:p.time, value:p.close})));
   }
