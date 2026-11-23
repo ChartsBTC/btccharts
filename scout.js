@@ -1084,6 +1084,10 @@ async function renderScout(kind){
     if(typeof isV2Page==='function'&&!isV2Page()) return false;
     await renderBtcGoldView();return true
   }
+  if(kind==='dca'){
+    if(typeof isV2Page==='function'&&!isV2Page()) return false;
+    await renderDcaView();return true
+  }
   if(kind==='200wnevrdown'){
     if(typeof isV2Page==='function'&&!isV2Page()) return false;
     await renderNeverDownView();return true
@@ -4629,3 +4633,240 @@ async function renderBtcGoldView(){
 window.renderBtcGoldView=renderBtcGoldView;
 window.computeBtcGold=computeBtcGold;
 window.formatOz=formatOz;
+
+// ---- Chart Scout Q: DCA vs price (v2 only) ----
+const DCA_DEFAULTS={start:'2021-03-31', end:'2026-11-20', amount:10, freq:'d'};
+function dcaTodayIso(){return new Date().toISOString().slice(0,10)}
+function dcaParams(){
+  const iso=v=>/^\d{4}-\d{2}-\d{2}$/.test(String(v||''))?String(v):'';
+  let start=iso($('dqs')&&$('dqs').value)||DCA_DEFAULTS.start;
+  let end=iso($('dqe')&&$('dqe').value)||DCA_DEFAULTS.end;
+  let amount=parseFloat($('dqa')&&$('dqa').value);
+  if(!(amount>0)) amount=DCA_DEFAULTS.amount;
+  let freq=($('dqf')&&$('dqf').value)||'d';
+  if(!['d','w','m'].includes(freq)) freq='d';
+  if(end<start){const t=start;start=end;end=t}
+  return {start,end,amount,freq};
+}
+function dcaBuyTimes(startIso, endIso, freq){
+  const s=Date.parse(startIso+'T00:00:00Z')/1000, e=Date.parse(endIso+'T00:00:00Z')/1000;
+  const out=[];
+  if(freq==='m'){
+    const d0=new Date(s*1000), day=d0.getUTCDate();
+    for(let k=0;;k++){
+      const y=d0.getUTCFullYear(), m=d0.getUTCMonth()+k;
+      const last=new Date(Date.UTC(y,m+1,0)).getUTCDate();
+      const t=Date.UTC(y,m,Math.min(day,last))/1000;
+      if(t>e) break;
+      out.push(t);
+    }
+    return out;
+  }
+  const step=(freq==='w'?7:1)*86400;
+  for(let t=s;t<=e;t+=step) out.push(t);
+  return out;
+}
+function computeDca(daily, p){
+  const day=t=>Math.floor(t/86400)*86400;
+  const s=Date.parse(p.start+'T00:00:00Z')/1000, e=Date.parse(p.end+'T00:00:00Z')/1000;
+  const series=daily.filter(b=>day(b.time)>=s&&day(b.time)<=e&&b.close>0);
+  if(series.length<2) return null;
+  const byDay=new Map(series.map(b=>[day(b.time),b]));
+  let coins=0, spent=0, n=0, j=0;
+  const sorted=series;
+  for(const t of dcaBuyTimes(p.start,p.end,p.freq)){
+    // close on that UTC day, or the last close before it (gaps)
+    let b=byDay.get(t);
+    if(!b){while(j+1<sorted.length&&day(sorted[j+1].time)<=t) j++; b=day(sorted[j].time)<=t?sorted[j]:null}
+    if(!b) continue;
+    coins+=p.amount/b.close; spent+=p.amount; n++;
+  }
+  const first=series[0], last=series[series.length-1];
+  const worth=coins*last.close;
+  const avgCost=coins>0?spent/coins:null;
+  return {
+    series, first, last, coins, spent, worth, avgCost, buys:n,
+    pricePct:(last.close/first.close-1)*100,
+    dcaPct:spent>0?(worth/spent-1)*100:0
+  };
+}
+function dcaPctLabel(v){
+  const r=Math.round(v);
+  return (r>0?'+':'')+r+'%';
+}
+function dcaUsd(v){
+  if(v==null||!isFinite(v)) return '';
+  return '$'+Math.round(v).toLocaleString('en-US');
+}
+function dcaUsdShort(v){
+  if(!isFinite(v)) return '';
+  if(Math.abs(v)>=1000) return '$'+(Math.round(v/100)/10).toLocaleString('en-US')+'k';
+  return '$'+(+v.toPrecision(3)).toLocaleString('en-US');
+}
+function dcaFreqWord(f){return f==='w'?'week':f==='m'?'month':'day'}
+function dcaText(pack, p){
+  const amt=p.amount%1===0?('$'+p.amount.toLocaleString('en-US')):('$'+p.amount.toFixed(2));
+  return {
+    headline:'Price: '+dcaPctLabel(pack.pricePct)+'. DCA: '+dcaPctLabel(pack.dcaPct)+'.',
+    subtitle:amt+' of Bitcoin every '+dcaFreqWord(p.freq)+', start to end. Spent '+dcaUsd(pack.spent)+'. Worth '+dcaUsd(pack.worth)+'.'
+  };
+}
+function dcaNiceStep(span, target){
+  const raw=span/Math.max(1,target), mag=Math.pow(10,Math.floor(Math.log10(raw)));
+  const n=raw/mag;
+  return (n<1.5?1:n<3?2:n<7?5:10)*mag;
+}
+function paintDca(ctx, w, h, pack, p, market){
+  const th=T();
+  const dark=typeof isDark==='function'&&isDark();
+  ctx.fillStyle=th.bg; ctx.fillRect(0,0,w,h);
+  const txt=dcaText(pack,p);
+  const small=w<560;
+  const padL=small?54:72, padR=small?16:28, top=small?64:78, bottom=small?58:56;
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle=th.title||th.text;
+  ctx.font='bold '+(small?16:22)+'px Verdana,Arial,sans-serif';
+  ctx.fillText(txt.headline, padL, 12, w-padL-padR);
+  ctx.fillStyle=th.muted||th.text;
+  ctx.font=(small?11:13)+'px Verdana,Arial,sans-serif';
+  ctx.fillText(txt.subtitle, padL, small?36:44, w-padL-padR);
+  const pw=w-padL-padR, ph=h-top-bottom;
+  if(pw<50||ph<50) return;
+  const xs=pack.series;
+  const t0=xs[0].time, t1=xs[xs.length-1].time;
+  let lo=Infinity, hi=-Infinity;
+  for(const b of xs){lo=Math.min(lo,b.close);hi=Math.max(hi,b.close)}
+  lo=Math.min(lo,pack.avgCost,pack.first.close); hi=Math.max(hi,pack.avgCost,pack.first.close);
+  const step=dcaNiceStep(hi-lo,6);
+  lo=Math.max(0,Math.floor(lo/step)*step); hi=Math.ceil(hi/step)*step;
+  const X=t=>padL+(t-t0)/Math.max(1,t1-t0)*pw;
+  const Y=v=>top+(1-(v-lo)/Math.max(1e-9,hi-lo))*ph;
+  // grid + y labels
+  ctx.strokeStyle=th.grid; ctx.lineWidth=1;
+  ctx.fillStyle=th.text; ctx.font='11px Verdana,Arial,sans-serif'; ctx.textAlign='right'; ctx.textBaseline='middle';
+  for(let v=lo; v<=hi+step/2; v+=step){
+    const y=Math.round(Y(v))+0.5;
+    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(padL+pw,y); ctx.stroke();
+    ctx.fillText(dcaUsdShort(v), padL-6, y);
+  }
+  // x labels: years (or months for short windows)
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  const spanDays=(t1-t0)/86400;
+  const d0=new Date(t0*1000);
+  const ticks=[];
+  if(spanDays>540){
+    for(let y=d0.getUTCFullYear()+1;;y++){const t=Date.UTC(y,0,1)/1000;if(t>t1)break;ticks.push([t,String(y)])}
+  }else{
+    const every=spanDays>180?3:1;
+    for(let k=1;;k++){const t=Date.UTC(d0.getUTCFullYear(),d0.getUTCMonth()+k,1)/1000;if(t>t1)break;
+      const dd=new Date(t*1000); if(dd.getUTCMonth()%every) continue;
+      ticks.push([t,['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dd.getUTCMonth()]+(dd.getUTCMonth()===0?' '+dd.getUTCFullYear():'')])}
+  }
+  for(const [t,lab] of ticks){
+    const x=Math.round(X(t))+0.5;
+    ctx.strokeStyle=th.grid; ctx.beginPath(); ctx.moveTo(x,top); ctx.lineTo(x,top+ph); ctx.stroke();
+    ctx.fillStyle=th.text; ctx.fillText(lab,x,top+ph+6);
+  }
+  ctx.strokeStyle=th.border; ctx.strokeRect(padL+0.5,top+0.5,pw,ph);
+  // band between start price and DCA cost
+  const yS=Y(pack.first.close), yA=Y(pack.avgCost);
+  const gain=pack.dcaPct>=0;
+  ctx.fillStyle=gain?(dark?'rgba(76,175,80,0.20)':'rgba(46,125,50,0.13)'):(dark?'rgba(229,57,53,0.22)':'rgba(198,40,40,0.12)');
+  ctx.fillRect(padL, Math.min(yS,yA), pw, Math.abs(yS-yA));
+  // price line
+  ctx.save(); ctx.beginPath(); ctx.rect(padL,top,pw,ph); ctx.clip();
+  ctx.strokeStyle='#f7931a'; ctx.lineWidth=2; ctx.beginPath();
+  xs.forEach((b,i)=>{const x=X(b.time), y=Y(b.close); if(i)ctx.lineTo(x,y); else ctx.moveTo(x,y)});
+  ctx.stroke(); ctx.restore();
+  // start-price dashed line
+  ctx.strokeStyle=th.text; ctx.lineWidth=1.5; ctx.setLineDash([6,5]);
+  ctx.beginPath(); ctx.moveTo(padL,yS); ctx.lineTo(padL+pw,yS); ctx.stroke(); ctx.setLineDash([]);
+  // DCA cost solid line
+  const costColor=gain?(dark?'#81c784':'#2e7d32'):(dark?'#ef9a9a':'#c62828');
+  ctx.strokeStyle=costColor; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(padL,yA); ctx.lineTo(padL+pw,yA); ctx.stroke();
+  // labels
+  const same=Math.round(pack.pricePct)===0;
+  ctx.font='bold 12px Verdana,Arial,sans-serif'; ctx.textBaseline='bottom'; ctx.textAlign='left';
+  const startLab=(same?'Start and end price ':'Start price ')+dcaUsdShort(pack.first.close);
+  const costLab='DCA average cost '+dcaUsdShort(pack.avgCost);
+  const above=yS<yA; // start line higher on screen than cost line
+  const boxed=(text,x,y,base,color)=>{
+    const tw=ctx.measureText(text).width, bh=16;
+    const by=base==='bottom'?y-bh:y;
+    ctx.fillStyle=th.boxBg||th.bg; ctx.fillRect(x-4,by,tw+8,bh);
+    ctx.fillStyle=color; ctx.textBaseline=base; ctx.fillText(text,x,y-(base==='bottom'?2:-2));
+  };
+  const lx=padL+Math.round(pw*0.30);
+  boxed(startLab, lx, above?yS-3:yS+3, above?'bottom':'top', th.text);
+  boxed(costLab, lx, above?yA+3:yA-3, above?'top':'bottom', costColor);
+  if(Math.abs(yS-yA)>18){
+    ctx.font='bold '+(small?13:16)+'px Verdana,Arial,sans-serif';
+    ctx.textAlign='right'; ctx.textBaseline='middle'; ctx.fillStyle=costColor;
+    ctx.fillText('DCA '+dcaPctLabel(pack.dcaPct), padL+pw-12, (yS+yA)/2);
+  }
+  // dots at start and end
+  for(const [b,lab,align] of [[pack.first,'','left'],[pack.last,same?'':'End '+dcaUsdShort(pack.last.close),'right']]){
+    const x=X(b.time), y=Y(b.close);
+    ctx.fillStyle='#f7931a'; ctx.strokeStyle=th.bg; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(x,y,5.5,0,Math.PI*2); ctx.fill(); ctx.stroke();
+    if(lab){ctx.fillStyle=th.text; ctx.font='11px Verdana,Arial,sans-serif';
+    ctx.textAlign=align; ctx.textBaseline='bottom';
+    ctx.fillText(lab, align==='left'?x+8:x-8, y-7);}
+  }
+  // footer
+  ctx.fillStyle=th.muted||th.text; ctx.font='10px Verdana,Arial,sans-serif';
+  ctx.textAlign='left'; ctx.textBaseline='bottom';
+  const src='Data: '+(typeof marketLabel==='function'?marketLabel(market):market)+' daily closes, '+isoUTC(pack.first.time)+' to '+isoUTC(pack.last.time)+'. Excludes fees.';
+  ctx.fillText(src, padL, h-6, w-padL-padR);
+}
+function renderDcaTools(host, p){
+  const bar=document.createElement('div');
+  bar.className='dca-tools';
+  const today=dcaTodayIso();
+  bar.innerHTML='<span class="dca-note">Buys use each day’s close. Change dates, amount and frequency above.</span>'+
+    '<button type="button" data-dca="post">Post window</button>'+
+    '<button type="button" data-dca="today">End today</button>';
+  host.appendChild(bar);
+  bar.querySelector('[data-dca="today"]').addEventListener('click',()=>{if($('dqe'))$('dqe').value=today; if(typeof draw==='function') draw(1)});
+  bar.querySelector('[data-dca="post"]').addEventListener('click',()=>{
+    if($('dqs'))$('dqs').value=DCA_DEFAULTS.start; if($('dqe'))$('dqe').value=DCA_DEFAULTS.end;
+    if($('dqa'))$('dqa').value=String(DCA_DEFAULTS.amount); if($('dqf'))$('dqf').value='d';
+    if(typeof draw==='function') draw(1);
+  });
+}
+async function renderDcaView(){
+  clearCharts();
+  document.body.classList.add('scout-view','scout-dca');
+  $('charts').classList.remove('has-volume');
+  const m0=typeof currentMarket==='function'?currentMarket():'combinedUSD';
+  const m=(typeof isBtcMarket==='function'&&isBtcMarket(m0))?m0:'combinedUSD';
+  const p=dcaParams();
+  // Show the effective values in the controls (they also go into the permalink).
+  if($('dqs')&&!$('dqs').value) $('dqs').value=p.start;
+  if($('dqe')&&!$('dqe').value) $('dqe').value=p.end;
+  if($('dqa')&&!$('dqa').value) $('dqa').value=String(p.amount);
+  let daily=[];
+  try{ daily=(await getDaily(m)).map(toBar).filter(b=>b&&b.close>0); }
+  catch(e){status('Error loading '+m+': '+e.message);return}
+  const pack=computeDca(daily,p);
+  const main=$('main'); main.innerHTML=''; $('subs').innerHTML='';
+  if(typeof setEpochLegend==='function') setEpochLegend(false);
+  if(!pack){
+    const msg=document.createElement('p'); msg.className='btcgold-empty';
+    msg.textContent='No daily closes in this window.';
+    main.appendChild(msg); status('No data for this DCA window.'); return;
+  }
+  const txt=dcaText(pack,p);
+  window.lastScout={kind:'dca', market:m, pack, params:p, title:txt.headline};
+  attachPaintCanvas(main,(ctx,w,h)=>paintDca(ctx,w,h,pack,p,m));
+  renderDcaTools($('subs'),p);
+  status(txt.headline+'  ·  '+txt.subtitle+'  ·  avg cost '+dcaUsd(pack.avgCost)+'  ·  '+pack.buys+' buys  ·  '+(typeof marketLabel==='function'?marketLabel(m):m));
+  const note=$('sourceNote');
+  if(note){
+    const splice=(m==='combinedUSD'&&typeof SPLICE==='string')?(SPLICE+' '):'';
+    note.textContent=splice+'Each buy uses that UTC day’s daily close (or the last close before it). Daily buys include both the start and end dates; weekly buys repeat every 7 days from the start; monthly buys repeat on the start’s day of the month. Worth uses the end date’s close. Excludes fees. Chart idea: Swan (@CorySwan).';
+  }
+}
+window.renderDcaView=renderDcaView;
+window.computeDca=computeDca;

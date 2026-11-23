@@ -3,7 +3,7 @@ const LW=LightweightCharts;
 
 const PUBLIC_CHART_BASE='https://chartsbtc.github.io/btccharts/';
 const ADVANCED_HASH_IDS=['cy','ll','pl','vt','rp','rpl','ep','ch','cl','hv','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','da','ca','cp','ym','otd','ott','rb','an','cm','rma','rme','el','ss','sp','sf','sh'];
-const VIEW_ALIASES={annualreturns:'annualreturns','200wnevrdown':'200wnevrdown',corrections:'corrections',assetreturns:'assetreturns',btcgold:'btcgold'};
+const VIEW_ALIASES={annualreturns:'annualreturns','200wnevrdown':'200wnevrdown',corrections:'corrections',assetreturns:'assetreturns',btcgold:'btcgold',dca:'dca'};
 function resolveHashAliases(hash){
   const raw=String(hash||'').replace(/^#/,'');
   // Short aliases such as #annualreturns are v2 entry points only, so a
@@ -87,7 +87,7 @@ function initTheme(){
 }
 
 
-const FIELDS=['m','cm','sp','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','da','cy','ca','cp','ch','cl','hv','ll','pl','ep','rp','rpl','vt','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','ym','otd','ott','rb','an','rma','rme','el','ss','sf','sh'];
+const FIELDS=['m','cm','sp','r','i','c','s','e','t','b','a1','m1','a2','m2','x','i1','i2','i3','i4','v','cv','l','p','da','cy','ca','cp','ch','cl','hv','ll','pl','ep','rp','rpl','vt','pma','pmm','rm','rn','rcl','pb','pbp','blp','blw','ym','otd','ott','rb','an','rma','rme','el','ss','sf','sh','dqs','dqe','dqa','dqf'];
 // populate indicator selects (only implemented ones, original naming)
 document.querySelectorAll('select.ind').forEach(s=>{s.innerHTML='<option value="">None</option>'+Object.entries(INDICATORS).map(([k,v])=>`<option value="${k}">${v.label.replace(/ \(.*/,'')}</option>`).join('')});
 
@@ -155,6 +155,7 @@ function syncViewToggle(){
   document.body.classList.toggle('scout-corrections',vt==='corrections' && !on);
   document.body.classList.toggle('scout-assetreturns',vt==='assetreturns' && !on);
   document.body.classList.toggle('scout-btcgold',vt==='btcgold' && !on);
+  document.body.classList.toggle('scout-dca',vt==='dca' && !on);
   if(vt==='onthisday' && typeof syncOnThisDayUi==='function') syncOnThisDayUi();
   document.body.classList.toggle('mode-mult',vt==='returns' && ($('rm')&&$('rm').value==='mult') && !on);
   document.querySelectorAll('#viewToggle button').forEach(b=>b.classList.toggle('on',(b.dataset.cy==='1')===on && !vt));
@@ -166,6 +167,7 @@ function syncViewToggle(){
   const oo=$('otdOpts'); if(oo) oo.hidden=!(vt==='onthisday' && !on);
   const rbo=$('rangeOpts'); if(rbo) rbo.hidden=!(vt==='ranges' && !on);
   const spo=$('spiralOpts'); if(spo) spo.hidden=!(vt==='spiral' && !on);
+  const dqo=$('dcaOpts'); if(dqo) dqo.hidden=!(vt==='dca' && !on);
   const showPct=!on && (vt==='powerlaw' || (vt==='pricema' && !($('pmm')&&$('pmm').value==='osc')) || (!vt && typeof ratioKind==='function' && ratioKind())) && !(typeof parsePctList==='function' && parsePctList().length===0 && ($('pb')&&($('pb').value==='off'||$('pb').value==='none')));
   document.body.classList.toggle('has-pct-bands', showPct);
   const pbo=$('pctBandOpts'); if(pbo) pbo.hidden=!showPct;
@@ -178,7 +180,7 @@ function syncViewToggle(){
 }
 
 
-const V2_LONG_VIEWS={powerlaw:1,drawdown:1,ath:1,sats:1,pricema:1,returns:1,epoch:1,calyear:1,onthisday:1,hcycles:1,ranges:1,spiral:1,annualreturns:1,'200wnevrdown':1,corrections:1,assetreturns:1,btcgold:1,cycles:1};
+const V2_LONG_VIEWS={powerlaw:1,drawdown:1,ath:1,sats:1,pricema:1,returns:1,epoch:1,calyear:1,onthisday:1,hcycles:1,ranges:1,spiral:1,annualreturns:1,'200wnevrdown':1,corrections:1,assetreturns:1,btcgold:1,dca:1,cycles:1};
 let v2LastMode={vt:'',cy:false}, v2PriceWindow=null;
 function v2IsLong(vt,cy){return !!(cy||V2_LONG_VIEWS[vt||''] )}
 function v2IsPriceDefaultWindow(){return !$('c').checked && $('r') && $('r').value==='60'}
@@ -724,7 +726,7 @@ function drawPowerLawUplot(u,xs,barAt){
 }
 
 let plSeries={};
-function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if(typeof clearScoutPlots==='function')clearScoutPlots();if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view','scout-view','scout-powerlaw','scout-drawdown','scout-ath','scout-sats','scout-pricema','scout-osc','scout-returns','mode-mult','scout-blend','scout-epoch','scout-calyear','scout-onthisday','has-otd-table','scout-hcycles','scout-ranges','scout-spiral','scout-annualreturns','scout-neverdown','scout-corrections','scout-assetreturns','scout-btcgold');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null;if($('plLegend')&&!($('pl')&&$('pl').checked)){$('plLegend').hidden=true;$('plLegend').textContent=''}}
+function clearCharts(){charts.forEach(c=>c.remove());charts=[];plSeries={};if(uplot){try{uplot.destroy()}catch(e){} uplot=null}if(typeof clearScoutPlots==='function')clearScoutPlots();if($('main'))$('main').querySelectorAll('.uplot').forEach(n=>n.remove());$('subs').innerHTML='';document.body.classList.remove('loglog-view','scout-view','scout-powerlaw','scout-drawdown','scout-ath','scout-sats','scout-pricema','scout-osc','scout-returns','mode-mult','scout-blend','scout-epoch','scout-calyear','scout-onthisday','has-otd-table','scout-hcycles','scout-ranges','scout-spiral','scout-annualreturns','scout-neverdown','scout-corrections','scout-assetreturns','scout-btcgold','scout-dca');if(typeof setEpochLegend==='function')setEpochLegend(false);window.lastRatio=null;if($('plLegend')&&!($('pl')&&$('pl').checked)){$('plLegend').hidden=true;$('plLegend').textContent=''}}
 
 
 function macroSourceCredit(m,cm){
@@ -1363,7 +1365,7 @@ function clear_table(){
   if($('loadRaw')) $('loadRaw').textContent='Show data';
 }
 function showTable(){
-  if($('cy').checked) fillCycleTable(); else if(typeof scoutView==='function'&&scoutView()==='powerlaw') fillPowerLawTable(); else if(scoutView()==='drawdown') fillDrawdownTable(); else if(scoutView()==='ath') fillAthTable(); else if(scoutView()==='sats') fillSatsTable(); else if(scoutView()==='pricema') fillPriceMaTable(); else if(scoutView()==='returns') fillReturnsTable(); else if(scoutView()==='epoch') fillEpochTable(); else if(scoutView()==='calyear') fillCalYearTable(); else if(scoutView()==='onthisday') fillOnThisDayTable(); else if(scoutView()==='hcycles') fillHcyclesTable(); else if(scoutView()==='ranges') fillRangesTable(); else if(scoutView()==='annualreturns') fillAnnualReturnsTable(); else if(scoutView()==='200wnevrdown') fillNeverDownTable(); else if(scoutView()==='corrections') fillCorrectionsTable(); else if(scoutView()==='assetreturns') fillAssetReturnsTable(); else if(scoutView()==='btcgold') fillBtcGoldTable(); else fillPriceTable();
+  if($('cy').checked) fillCycleTable(); else if(typeof scoutView==='function'&&scoutView()==='powerlaw') fillPowerLawTable(); else if(scoutView()==='drawdown') fillDrawdownTable(); else if(scoutView()==='ath') fillAthTable(); else if(scoutView()==='sats') fillSatsTable(); else if(scoutView()==='pricema') fillPriceMaTable(); else if(scoutView()==='returns') fillReturnsTable(); else if(scoutView()==='epoch') fillEpochTable(); else if(scoutView()==='calyear') fillCalYearTable(); else if(scoutView()==='onthisday') fillOnThisDayTable(); else if(scoutView()==='hcycles') fillHcyclesTable(); else if(scoutView()==='ranges') fillRangesTable(); else if(scoutView()==='annualreturns') fillAnnualReturnsTable(); else if(scoutView()==='200wnevrdown') fillNeverDownTable(); else if(scoutView()==='corrections') fillCorrectionsTable(); else if(scoutView()==='assetreturns') fillAssetReturnsTable(); else if(scoutView()==='btcgold') fillBtcGoldTable(); else if(scoutView()==='dca') fillDcaTable(); else fillPriceTable();
   tableOpen=true;
   $('tableWrap').hidden=false;
   $('downloadCsv').hidden=false;
@@ -1482,6 +1484,24 @@ function fillAssetReturnsTable(){
     tableCsv.push(rec);
     rows.push('<tr>'+rec.map(c=>'<td>'+c+'</td>').join('')+'</tr>');
   }
+  $('chart_table').tBodies[0].innerHTML=rows.join('');
+}
+function fillDcaTable(){
+  const s=window.lastScout||{}, pack=s.pack, p=s.params;
+  const head=['Date','Close','Buy','Coins held','Spent','Worth'];
+  setTableHead(head); tableCsv=[head.slice()];
+  if(!pack||!p){$('chart_table').tBodies[0].innerHTML='';return}
+  const buys=new Set(dcaBuyTimes(p.start,p.end,p.freq));
+  let coins=0, spent=0; const rows=[];
+  for(const b of pack.series){
+    const d=Math.floor(b.time/86400)*86400;
+    const buy=buys.has(d);
+    if(buy){coins+=p.amount/b.close; spent+=p.amount}
+    const rec=[isoUTC(b.time), String(+b.close.toFixed(2)), buy?String(p.amount):'', coins.toFixed(8), spent.toFixed(2), (coins*b.close).toFixed(2)];
+    tableCsv.push(rec);
+    rows.push('<tr>'+rec.map(c=>'<td>'+c+'</td>').join('')+'</tr>');
+  }
+  rows.reverse();
   $('chart_table').tBodies[0].innerHTML=rows.join('');
 }
 function fillBtcGoldTable(){
@@ -1679,7 +1699,7 @@ function isMobileUa(){
 }
 function chartTitleLine(){
   const vt=($('vt')&&$('vt').value)||'';
-  if(vt==='powerlaw'||vt==='drawdown'||vt==='ath'||vt==='sats'||vt==='pricema'||vt==='returns'||vt==='epoch'||vt==='calyear'||vt==='onthisday'||vt==='hcycles'||vt==='ranges'||vt==='spiral'||vt==='annualreturns'||vt==='200wnevrdown'||vt==='corrections'||vt==='assetreturns'||vt==='btcgold'){
+  if(vt==='powerlaw'||vt==='drawdown'||vt==='ath'||vt==='sats'||vt==='pricema'||vt==='returns'||vt==='epoch'||vt==='calyear'||vt==='onthisday'||vt==='hcycles'||vt==='ranges'||vt==='spiral'||vt==='annualreturns'||vt==='200wnevrdown'||vt==='corrections'||vt==='assetreturns'||vt==='btcgold'||vt==='dca'){
     const m=currentMarket();
     const name=m==='combinedUSD'?'BTC/USD Combined':('BTC/USD '+marketLabel(m).replace(/ \(USD\)/,''));
     if(vt==='ranges'){
@@ -1706,6 +1726,10 @@ function chartTitleLine(){
     }
     if(vt==='btcgold'){
       return 'Bitcoin priced in gold (oz gold per BTC)';
+    }
+    if(vt==='dca'){
+      const s=window.lastScout||{};
+      return (s.kind==='dca'&&s.title)||'DCA vs price';
     }
     if(vt==='hcycles'){
       return name+' · Halving cycles (USD)';
@@ -2116,6 +2140,17 @@ function shareCaption(){
     if(gld) bits.push('Gold '+(typeof formatAssetPct==='function'?formatAssetPct(gld.ytd):'')+' YTD');
     if(pack.btcAsOf||pack.asOf) bits.push('as of '+(pack.btcAsOf||pack.asOf));
     bits.push('Chart idea: Charlie Bilello');
+    return bits.join('. ')+'.';
+  }
+  if(vt==='dca'){
+    const s=window.lastScout||{};
+    if(s.kind==='dca'&&s.pack&&typeof dcaText==='function'){
+      const t=dcaText(s.pack,s.params);
+      bits.push(t.headline.replace(/\.$/,''));
+      bits.push(t.subtitle.replace(/\.$/,''));
+      bits.push('Window '+s.params.start+' to '+s.params.end+', excludes fees');
+    }
+    bits.push('Chart idea: Swan');
     return bits.join('. ')+'.';
   }
   if(vt==='btcgold'){

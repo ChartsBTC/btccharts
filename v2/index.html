@@ -42,6 +42,7 @@
       <option value="corrections">Major corrections from ATHs</option>
       <option value="assetreturns">Asset class returns since 2011</option>
       <option value="btcgold">Bitcoin priced in gold</option>
+      <option value="dca">DCA vs price</option>
       <option value="200wnevrdown">200w average never down</option>
       <option value="epoch">Halving-epoch candles</option>
       <option value="calyear">Calendar year overlay</option>
@@ -125,6 +126,16 @@
       <label>Mode <select id="ym">
       <option value="raw" selected>Raw USD (linear)</option>
       <option value="idx">Indexed to current Jan 1 (log)</option>
+    </select></label>
+    </span>
+    <span id="dcaOpts" class="scout-opts" hidden>
+      <label>Start <input type="date" id="dqs" min="2010-07-17"></label>
+      <label>End <input type="date" id="dqe" min="2010-07-17"></label>
+      <label>Amount $<input type="number" id="dqa" min="1" step="1" style="width:6em"></label>
+      <label>Every <select id="dqf">
+      <option value="" selected>day</option>
+      <option value="w">week</option>
+      <option value="m">month</option>
     </select></label>
     </span>
     <span id="returnsOpts" class="scout-opts" hidden>

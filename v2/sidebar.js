@@ -49,6 +49,7 @@
     ], extra:[
       {id:'corrections', label:'Major corrections from ATHs', set:{vt:'corrections',r:'',i:'Daily'}},
       {id:'assetreturns', label:'Asset class returns since 2011', set:{vt:'assetreturns',r:'',i:'Daily'}},
+      {id:'dca', label:'DCA vs price', set:{vt:'dca',r:'',i:'Daily'}},
       {id:'calyear-idx', label:'Calendar years, indexed', set:{vt:'calyear',ym:'idx',r:'',i:'Daily'}}
     ]},
     {name:'History', items:[

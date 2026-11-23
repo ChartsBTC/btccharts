@@ -443,6 +443,7 @@ body.page-v2 #viewToggle button:disabled{opacity:.45;cursor:not-allowed}
   body.page-v2.scout-neverdown #main{height:min(600px,85vh) !important}
   body.page-v2.scout-corrections #main{height:min(240px,40vh) !important}
   body.page-v2.scout-btcgold #main{height:min(600px,85vh) !important}
+  body.page-v2.scout-dca #main{height:min(560px,80vh) !important}
 }
 
 /* v2: keep Cycles and Spiral visible but disabled (with a tooltip) when the symbol is not Bitcoin. */
@@ -653,3 +654,12 @@ body.page-v2 #v2Nav .v2-nav-more:focus-visible{
   body.page-v2 .v2-main #chartoptions,
   body.page-v2 .v2-main #content_chart{padding-left:0;padding-right:0}
 }
+
+/* Chart Scout Q: DCA vs price (v2) */
+body.scout-dca #main{height:520px}
+body.scout-dca #dcaOpts{display:inline-flex}
+body.scout-dca #scaleToggle,body.scout-dca #markerBox,body.scout-dca #ratioBox,body.scout-dca #ratioLogBox{display:none}
+.dca-tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:8px 12px;border-bottom:1px solid var(--chart-border,#ccc);background:var(--bg)}
+.dca-tools button{font:bold 11px Verdana,Arial,sans-serif;padding:6px 12px;min-height:32px;cursor:pointer;border:1px solid #f7931a;background:var(--seg-bg,#fff);color:var(--seg-fg,#333);border-radius:4px}
+.dca-note{font-size:11px;color:var(--muted);margin-right:auto}
+#dcaOpts input[type=date]{font-size:12px}
