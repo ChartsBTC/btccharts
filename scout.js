@@ -1084,6 +1084,10 @@ async function renderScout(kind){
     if(typeof isV2Page==='function'&&!isV2Page()) return false;
     await renderBtcGoldView();return true
   }
+  if(kind==='halvingmultiple'){
+    if(typeof isV2Page==='function'&&!isV2Page()) return false;
+    await renderHalvingMultipleView();return true
+  }
   if(kind==='dca'){
     if(typeof isV2Page==='function'&&!isV2Page()) return false;
     await renderDcaView();return true
@@ -4870,3 +4874,172 @@ async function renderDcaView(){
 }
 window.renderDcaView=renderDcaView;
 window.computeDca=computeDca;
+
+// ---- Chart Scout R: cycle-low multiple by days from halving (v2 only) ----
+// Era k is centred on halving k (2012, 2016, 2020, 2024 and the estimated 2028
+// halving). Its "cycle low" is the latest cycle low from the site's own cycle
+// detection (detectCycles in cycles.js) dated before that halving; for the
+// 2028 era that is the current cycle's low so far.
+const HM_NEXT_HALVING={time:Date.UTC(2028,3,17)/1000,label:'2028-04-17 (est.)'};
+const HM_COLORS_LIGHT=['#8d6e63','#1565c0','#2e7d32','#6a1b9a','#f7931a'];
+const HM_COLORS_DARK=['#bcaaa4','#64b5f6','#81c784','#ce93d8','#ffb74d'];
+const HM_D0=-700, HM_D1=700;
+function computeHalvingMultiple(daily, cycles, nowT){
+  const halvings=(typeof HALVINGS!=='undefined'?HALVINGS:[]).concat([HM_NEXT_HALVING]);
+  const lows=[];
+  for(const c of cycles){
+    if(c.startLow) lows.push({time:c.startLow.time, price:c.startLow.price, date:c.startLow.date, soFar:false});
+    if(c.open&&c.endLow) lows.push({time:c.endLow.time, price:c.endLow.price, date:c.endLow.date, soFar:true});
+  }
+  lows.sort((a,b)=>a.time-b.time);
+  const eras=halvings.map((hv,i)=>{
+    let low=null;
+    for(const l of lows) if(l.time<hv.time) low=l;
+    const pts=[];
+    if(low){
+      for(const b of daily){
+        const d=Math.round((b.time-hv.time)/86400);
+        if(d<HM_D0||d>HM_D1) continue;
+        pts.push({day:d, time:b.time, close:b.close, mult:b.close/low.price});
+      }
+    }
+    return {era:i+1, halving:hv, low, pts, estimated:hv===HM_NEXT_HALVING};
+  }).filter(e=>e.low&&e.pts.length>1);
+  const cur=eras[eras.length-1];
+  const lastPt=cur&&cur.pts[cur.pts.length-1];
+  const nowDay=lastPt?lastPt.day:Math.round(((nowT||Date.now()/1000)-HM_NEXT_HALVING.time)/86400);
+  const atNow=eras.map(e=>{
+    let best=null;
+    for(const p of e.pts) if(p.day<=nowDay) best=p;
+    return {era:e.era, day:best&&best.day, mult:best&&best.mult, date:best&&isoUTC(best.time)};
+  });
+  return {eras, nowDay, atNow, cur, lastPt};
+}
+function hmMultLabel(v){
+  if(v==null||!isFinite(v)) return '';
+  if(v>=100) return Math.round(v)+'x';
+  if(v>=10) return v.toFixed(1)+'x';
+  return v.toFixed(2)+'x';
+}
+function paintHalvingMultiple(ctx, w, h, pack, opts){
+  const th=T();
+  const dark=typeof isDark==='function'&&isDark();
+  const colors=dark?HM_COLORS_DARK:HM_COLORS_LIGHT;
+  ctx.fillStyle=th.bg; ctx.fillRect(0,0,w,h);
+  const small=w<560;
+  const padL=small?56:76, padR=small?14:24, top=small?56:64, bottom=small?62:58;
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle=th.title||th.text; ctx.font='bold '+(small?14:18)+'px Verdana,Arial,sans-serif';
+  ctx.fillText('Bitcoin: multiple of cycle low, by days from halving', padL, 10, w-padL-padR);
+  ctx.fillStyle=th.muted||th.text; ctx.font=(small?10:12)+'px Verdana,Arial,sans-serif';
+  const cur=pack.cur, lp=pack.lastPt;
+  ctx.fillText('Now: day '+pack.nowDay+' of Era '+(cur?cur.era:'?')+' ('+hmMultLabel(lp&&lp.mult)+' its cycle low). Model by @ChartsBtc.', padL, small?30:36, w-padL-padR);
+  const pw=w-padL-padR, ph=h-top-bottom;
+  if(pw<60||ph<60) return;
+  let lo=0.8, hi=100;
+  if(!opts.clip){
+    lo=Infinity; hi=-Infinity;
+    for(const e of pack.eras) for(const p of e.pts){lo=Math.min(lo,p.mult);hi=Math.max(hi,p.mult)}
+    lo=Math.min(lo,0.8); hi=Math.max(hi,100);
+  }
+  const L0=Math.log10(lo), L1=Math.log10(hi);
+  const X=d=>padL+(d-HM_D0)/(HM_D1-HM_D0)*pw;
+  const Y=v=>top+(1-(Math.log10(v)-L0)/(L1-L0))*ph;
+  // grid
+  ctx.strokeStyle=th.grid; ctx.lineWidth=1; ctx.font='11px Verdana,Arial,sans-serif';
+  ctx.textAlign='right'; ctx.textBaseline='middle'; ctx.fillStyle=th.text;
+  const ticks=[];
+  for(let e=Math.floor(L0)-1;e<=Math.ceil(L1);e++) for(const m of [1,2,5]){const v=m*Math.pow(10,e); if(v>=lo*0.999&&v<=hi*1.001) ticks.push(v)}
+  for(const v of ticks){
+    const y=Math.round(Y(v))+0.5;
+    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(padL+pw,y); ctx.stroke();
+    ctx.fillText((v<1?v.toFixed(v<0.1?2:1):v.toLocaleString('en-US'))+'x', padL-6, y);
+  }
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  for(let d=HM_D0; d<=HM_D1; d+=100){
+    const x=Math.round(X(d))+0.5;
+    ctx.strokeStyle=d===0?(th.text):th.grid; ctx.lineWidth=d===0?1.2:1;
+    ctx.beginPath(); ctx.moveTo(x,top); ctx.lineTo(x,top+ph); ctx.stroke();
+    if(!small||d%200===0){ctx.fillStyle=th.text; ctx.fillText(String(d), x, top+ph+6)}
+  }
+  ctx.fillStyle=th.text; ctx.textBaseline='top';
+  ctx.fillText('Days from halving', padL+pw/2, top+ph+22);
+  ctx.fillText('Halving', X(0), top+4);
+  ctx.save(); ctx.translate(14, top+ph/2); ctx.rotate(-Math.PI/2);
+  ctx.textBaseline='top'; ctx.fillText('Multiple (current price / cycle low price)',0,0); ctx.restore();
+  ctx.strokeStyle=th.border; ctx.lineWidth=1; ctx.strokeRect(padL+0.5,top+0.5,pw,ph);
+  // 1x line
+  if(lo<1&&hi>1){ctx.strokeStyle=th.muted||th.text; ctx.setLineDash([3,4]); ctx.beginPath(); ctx.moveTo(padL,Y(1)); ctx.lineTo(padL+pw,Y(1)); ctx.stroke(); ctx.setLineDash([])}
+  // lines
+  ctx.save(); ctx.beginPath(); ctx.rect(padL,top,pw,ph); ctx.clip();
+  pack.eras.forEach((e,i)=>{
+    ctx.strokeStyle=colors[i%colors.length]; ctx.lineWidth=e===pack.cur?2.6:1.6;
+    ctx.beginPath(); let started=false;
+    for(const p of e.pts){
+      const v=Math.min(Math.max(p.mult,lo*0.5),hi*2);
+      const x=X(p.day), y=Y(v);
+      if(started) ctx.lineTo(x,y); else {ctx.moveTo(x,y); started=true}
+    }
+    ctx.stroke();
+  });
+  ctx.restore();
+  // current position marker
+  const xn=X(pack.nowDay);
+  ctx.strokeStyle='#e53935'; ctx.lineWidth=1.5; ctx.setLineDash([6,4]);
+  ctx.beginPath(); ctx.moveTo(xn,top); ctx.lineTo(xn,top+ph); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle='#e53935'; ctx.font='bold 11px Verdana,Arial,sans-serif'; ctx.textAlign='left'; ctx.textBaseline='bottom';
+  ctx.fillText('Now: '+pack.nowDay+' days', xn+5, top+ph-6);
+  if(lp){ctx.beginPath(); ctx.arc(xn, Y(Math.min(Math.max(lp.mult,lo),hi)), 4.5, 0, Math.PI*2); ctx.fill()}
+  // legend
+  ctx.font=(small?10:11)+'px Verdana,Arial,sans-serif'; ctx.textBaseline='middle'; ctx.textAlign='left';
+  const lx=padL+10; let ly=top+14;
+  const boxW=small?170:250, boxH=pack.eras.length*16+8;
+  ctx.fillStyle=th.boxBg||th.bg; ctx.fillRect(lx-6, ly-10, boxW, boxH);
+  pack.eras.forEach((e,i)=>{
+    ctx.fillStyle=colors[i%colors.length]; ctx.fillRect(lx, ly-1.5, 16, 3);
+    ctx.fillStyle=th.text;
+    const at=pack.atNow[i];
+    const txt='Era '+e.era+'  ·  halving '+e.halving.label.slice(0,small?4:20)+(small?'':'  ·  at '+pack.nowDay+'d '+hmMultLabel(at&&at.mult));
+    ctx.fillText(txt, lx+22, ly);
+    ly+=16;
+  });
+  // footer
+  ctx.fillStyle=th.muted||th.text; ctx.font='10px Verdana,Arial,sans-serif'; ctx.textAlign='left'; ctx.textBaseline='bottom';
+  ctx.fillText('Data: Combined history daily closes ÷ each era’s cycle low (site cycle detection, intraday lows).'+(opts.clip?' Y axis clipped to 0.8–100x.':''), padL, h-6, w-padL-padR);
+}
+function renderHalvingMultipleTools(host, opts){
+  const bar=document.createElement('div');
+  bar.className='dca-tools';
+  bar.innerHTML='<label class="btcgold-ma"><input type="checkbox" id="hmClip"'+(opts.clip?' checked':'')+'> Clip Y axis to 0.8–100x (as in the post)</label>';
+  host.appendChild(bar);
+  $('hmClip').addEventListener('change',()=>{
+    if(window.lastScout&&window.lastScout.kind==='halvingmultiple'){window.lastScout.opts.clip=$('hmClip').checked; if(window._hmRedraw) window._hmRedraw()}
+  });
+}
+async function renderHalvingMultipleView(){
+  clearCharts();
+  document.body.classList.add('scout-view','scout-halvingmultiple');
+  $('charts').classList.remove('has-volume');
+  let daily=[];
+  try{ daily=(await getDaily('combinedUSD')).map(toBar).filter(b=>b&&b.close>0); }
+  catch(e){status('Error loading combinedUSD: '+e.message);return}
+  const cycles=detectCycles(daily);
+  const pack=computeHalvingMultiple(daily, cycles);
+  const prev=window.lastScout;
+  const opts={clip: prev&&prev.kind==='halvingmultiple'?prev.opts.clip:true};
+  window.lastScout={kind:'halvingmultiple', pack, opts, title:'Bitcoin: multiple of cycle low, by days from halving'};
+  const main=$('main'); main.innerHTML=''; $('subs').innerHTML='';
+  if(typeof setEpochLegend==='function') setEpochLegend(false);
+  const att=attachPaintCanvas(main,(ctx,w,h)=>paintHalvingMultiple(ctx,w,h,pack,window.lastScout.opts));
+  window._hmRedraw=att&&att.redraw;
+  renderHalvingMultipleTools($('subs'), opts);
+  const cur=pack.cur, lp=pack.lastPt;
+  status('Era '+(cur?cur.era:'?')+' day '+pack.nowDay+' vs halving '+HM_NEXT_HALVING.label+'  ·  '+hmMultLabel(lp&&lp.mult)+' cycle low '+(cur&&cur.low?('$'+Math.round(cur.low.price).toLocaleString('en-US')+' on '+cur.low.date+(cur.low.soFar?' (low so far)':'')):'')+
+    '  ·  at day '+pack.nowDay+': '+pack.atNow.map(a=>'Era '+a.era+' '+hmMultLabel(a.mult)).join(', '));
+  const note=$('sourceNote');
+  if(note){
+    note.textContent=(typeof SPLICE==='string'?SPLICE+' ':'')+'Eras are centred on the 2012, 2016, 2020 and 2024 halvings and the estimated 2028 halving ('+HM_NEXT_HALVING.label+', about 210,000 blocks at 10 minutes after 2024-04-20). Each era’s cycle low is the latest cycle low from the site’s own cycle detection (the same lows as the Cycles view, using intraday lows) dated before that halving; Era 5 uses the current cycle’s low so far, so its line moves if a new low prints. Daily closes, days −700 to +700. Chart idea: @QuintenFrancois / Bitbo, model by @ChartsBtc.';
+  }
+}
+window.renderHalvingMultipleView=renderHalvingMultipleView;
+window.computeHalvingMultiple=computeHalvingMultiple;
