@@ -1084,6 +1084,10 @@ async function renderScout(kind){
     if(typeof isV2Page==='function'&&!isV2Page()) return false;
     await renderBtcGoldView();return true
   }
+  if(kind==='btcgold200w'){
+    if(typeof isV2Page==='function'&&!isV2Page()) return false;
+    await renderBtcGold200wView();return true
+  }
   if(kind==='halvingmultiple'){
     if(typeof isV2Page==='function'&&!isV2Page()) return false;
     await renderHalvingMultipleView();return true
@@ -5043,3 +5047,244 @@ async function renderHalvingMultipleView(){
 }
 window.renderHalvingMultipleView=renderHalvingMultipleView;
 window.computeHalvingMultiple=computeHalvingMultiple;
+
+// ---- Chart Scout T: BTC's 200-Week Trend in Gold (v2 only) ----
+// Daily BTC/gold ounces (same goldUSD series as #vtgbtcgold). 200-week SMA of
+// Sunday closes of that ratio. White dots sit on the last completed Sunday on
+// or before each Nov 23, labeled with the MA's year-over-year change.
+const BG200W_START=Date.UTC(2019,9,1)/1000; // 2019-10-01, "late 2019"
+function lastSundayOnOrBeforeIso(iso){
+  let t=Date.parse(iso+'T00:00:00Z')/1000;
+  if(!isFinite(t)) return null;
+  while(new Date(t*1000).getUTCDay()!==0) t-=86400;
+  return t;
+}
+function formatBgYoy(v){
+  if(v==null||!isFinite(v)) return '';
+  const whole=Math.abs(v)>=10;
+  const n=whole?Math.round(v):(Math.round(v*10)/10);
+  const s=whole?String(n):n.toFixed(1);
+  return (n>0?'+':'')+s+'%';
+}
+function formatBgOzLabel(v){
+  if(v==null||!isFinite(v)) return '';
+  if(Math.abs(v)>=10) return (Math.round(v*10)/10).toFixed(1)+' oz';
+  return (Math.round(v*100)/100).toFixed(2)+' oz';
+}
+function computeBtcGold200w(btcDaily, goldRows){
+  const full=computeBtcGold(btcDaily, goldRows, {startTime:0});
+  const daily=full.all||full.pts||[];
+  const sundays=daily.filter(p=>new Date(p.time*1000).getUTCDay()===0);
+  const ma=smaOf(sundays.map(p=>p.close), 200);
+  const weekly=[];
+  for(let i=0;i<sundays.length;i++) if(ma[i]!=null) weekly.push({time:sundays[i].time, oz:sundays[i].close, ma:ma[i]});
+  const byTime=new Map(weekly.map(p=>[p.time,p]));
+  function atOrBefore(t){
+    if(byTime.has(t)) return byTime.get(t);
+    let best=null;
+    for(const p of weekly){ if(p.time<=t) best=p; else break; }
+    return best;
+  }
+  const lastDaily=daily.at(-1);
+  const lastMa=weekly.at(-1);
+  const lastYear=new Date(((lastDaily&&lastDaily.time)||Date.now()/1000)*1000).getUTCFullYear();
+  const dots=[];
+  for(let y=2020;y<=lastYear;y++){
+    const t=lastSundayOnOrBeforeIso(y+'-11-23');
+    const prevT=lastSundayOnOrBeforeIso((y-1)+'-11-23');
+    const cur=t!=null?atOrBefore(t):null;
+    const prev=prevT!=null?atOrBefore(prevT):null;
+    if(!cur||!prev||!(prev.ma>0)) continue;
+    dots.push({year:y, time:cur.time, ma:cur.ma, yoy:(cur.ma/prev.ma-1)*100, prevMa:prev.ma});
+  }
+  const below=(lastMa&&lastDaily&&lastMa.ma>0)?((lastMa.ma-lastDaily.close)/lastMa.ma*100):null;
+  return {daily, weekly, dots, lastDaily, lastMa, below};
+}
+function paintBtcGold200w(ctx,w,h,pack,opts){
+  const th=T();
+  const dark=typeof isDark==='function'&&isDark();
+  ctx.fillStyle=th.bg; ctx.fillRect(0,0,w,h);
+  const small=w<560;
+  const start=opts&&opts.all?((pack.weekly[0]&&pack.weekly[0].time)||BG200W_START):BG200W_START;
+  const daily=pack.daily.filter(p=>p.time>=start);
+  const weekly=pack.weekly.filter(p=>p.time>=start);
+  const dots=pack.dots.filter(p=>p.time>=start);
+  if(!daily.length){
+    ctx.fillStyle=th.muted; ctx.font='13px Verdana,Arial,sans-serif';
+    ctx.fillText('Not enough Bitcoin / gold overlap in this window.', 24, 36);
+    return;
+  }
+  const last=pack.lastDaily, lastMa=pack.lastMa;
+  const below=pack.below;
+  const padL=small?46:70, padR=small?72:96, top=small?58:70, bottom=small?44:48;
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle=th.title||th.text;
+  ctx.font='bold '+(small?14:18)+'px Verdana,Arial,sans-serif';
+  ctx.fillText("BTC's 200-Week Trend in Gold", padL, 10, w-padL-padR);
+  ctx.fillStyle=th.muted||th.text; ctx.font=(small?10:12)+'px Verdana,Arial,sans-serif';
+  const belowTxt=below==null?'':(below>=0
+    ?('Spot is '+(Math.abs(below)>=10?Math.round(below): (Math.round(below*10)/10).toFixed(1))+'% below the 200-week MA')
+    :('Spot is '+(Math.abs(below)>=10?Math.round(-below):(Math.round(-below*10)/10).toFixed(1))+'% above the 200-week MA'));
+  ctx.fillText(belowTxt, padL, small?30:36, w-padL-padR);
+  const pw=w-padL-padR, ph=h-top-bottom;
+  if(pw<60||ph<60) return;
+  const t0=daily[0].time, t1=daily[daily.length-1].time;
+  let lo,hi;
+  if(opts&&opts.all){
+    lo=Infinity; hi=-Infinity;
+    for(const p of daily){ if(p.close>0){lo=Math.min(lo,p.close);hi=Math.max(hi,p.close)} }
+    for(const p of weekly){ if(p.ma>0){lo=Math.min(lo,p.ma);hi=Math.max(hi,p.ma)} }
+    lo=Math.max(lo/1.15, 0.05); hi=hi*1.15;
+  }else{
+    lo=2.5; hi=40;
+  }
+  const L0=Math.log10(lo), L1=Math.log10(hi);
+  const X=t=>padL+(t-t0)/Math.max(1,t1-t0)*pw;
+  const Y=v=>{
+    const c=Math.min(Math.max(v,lo*0.5),hi*2);
+    return top+(1-(Math.log10(c)-L0)/(L1-L0))*ph;
+  };
+  ctx.save(); ctx.beginPath(); ctx.rect(padL,top,pw,ph); ctx.clip();
+  // horizontal grid
+  ctx.strokeStyle=th.grid; ctx.lineWidth=1; ctx.font='11px Verdana,Arial,sans-serif';
+  ctx.textAlign='right'; ctx.textBaseline='middle'; ctx.fillStyle=th.text;
+  const yTicks=opts&&opts.all?[0.1,0.2,0.5,1,2,5,10,20,40,80]:[3,5,10,15,20,30,40];
+  ctx.restore();
+  for(const v of yTicks){
+    if(v<lo*0.98||v>hi*1.02) continue;
+    const y=Math.round(Y(v))+0.5;
+    ctx.strokeStyle=th.grid; ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(padL+pw,y); ctx.stroke();
+    ctx.fillStyle=th.text; ctx.textAlign='right'; ctx.textBaseline='middle';
+    ctx.font='11px Verdana,Arial,sans-serif';
+    ctx.fillText((v>=10?String(v):String(v))+' oz', padL-6, y);
+  }
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  const y0=new Date(t0*1000).getUTCFullYear(), y1=new Date(t1*1000).getUTCFullYear();
+  for(let y=y0;y<=y1;y++){
+    const t=Date.UTC(y,0,1)/1000;
+    if(t<t0||t>t1) continue;
+    const x=Math.round(X(t))+0.5;
+    ctx.strokeStyle=th.grid; ctx.beginPath(); ctx.moveTo(x,top); ctx.lineTo(x,top+ph); ctx.stroke();
+    ctx.fillStyle=th.text; ctx.fillText(String(y), x, top+ph+6);
+  }
+  ctx.strokeStyle=th.border; ctx.lineWidth=1; ctx.strokeRect(padL+0.5,top+0.5,pw,ph);
+  ctx.save(); ctx.beginPath(); ctx.rect(padL,top,pw,ph); ctx.clip();
+  // daily orange line
+  ctx.strokeStyle='#f7931a'; ctx.lineWidth=1.5; ctx.beginPath();
+  daily.forEach((p,i)=>{const x=X(p.time), y=Y(p.close); if(i) ctx.lineTo(x,y); else ctx.moveTo(x,y)});
+  ctx.stroke();
+  // 200w MA thick blue — include the last Sunday before the window so the line enters cleanly
+  const maPts=pack.weekly.filter(p=>p.time>=start-14*86400);
+  ctx.strokeStyle='#1565c0'; ctx.lineWidth=3; ctx.lineJoin='round'; ctx.beginPath();
+  let started=false;
+  for(const p of maPts){
+    const x=X(p.time), y=Y(p.ma);
+    if(started) ctx.lineTo(x,y); else {ctx.moveTo(x,y); started=true}
+  }
+  // extend MA to the last daily date as a flat hold of the last Sunday value
+  if(lastMa&&last&&last.time>lastMa.time){ctx.lineTo(X(last.time), Y(lastMa.ma))}
+  ctx.stroke();
+  ctx.restore();
+  // Nov 23 dots + YoY labels
+  ctx.font=(small?'bold 10px':'bold 11px')+' Verdana,Arial,sans-serif';
+  dots.forEach((d,i)=>{
+    const x=X(d.time), y=Y(d.ma);
+    if(x<padL-2||x>padL+pw+2) return;
+    ctx.fillStyle='#fff'; ctx.strokeStyle='#1565c0'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2); ctx.fill(); ctx.stroke();
+    const lab=formatBgYoy(d.yoy);
+    const above=(i%2===0);
+    const lx=x+(small?0:2), ly=above?y-10:y+10;
+    const tw=ctx.measureText(lab).width;
+    const tx=Math.min(Math.max(lx-tw/2, padL+2), padL+pw-tw-2);
+    ctx.fillStyle=th.boxBg||th.bg;
+    ctx.fillRect(tx-2, (above?ly-11:ly-1), tw+4, 13);
+    ctx.fillStyle=th.text; ctx.textAlign='left'; ctx.textBaseline=above?'bottom':'top';
+    ctx.fillText(lab, tx, ly);
+  });
+  // right-edge labels
+  if(last&&lastMa){
+    const ySpot=Y(last.close), yMa=Y(lastMa.ma);
+    const labSpot='BTC/Gold '+formatBgOzLabel(last.close);
+    const labMa='200W MA '+formatBgOzLabel(lastMa.ma);
+    const drawLab=(text,y,color)=>{
+      ctx.font='bold 11px Verdana,Arial,sans-serif';
+      const tw=ctx.measureText(text).width;
+      const ty=Math.min(Math.max(y, top+8), top+ph-8);
+      ctx.fillStyle=th.boxBg||th.bg;
+      ctx.fillRect(padL+pw+4, ty-7, Math.min(tw+6, padR-6), 14);
+      ctx.fillStyle=color; ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.fillText(text, padL+pw+6, ty, padR-8);
+    };
+    // keep the two labels from overlapping
+    let ys=ySpot, ym=yMa;
+    if(Math.abs(ys-ym)<16){ if(ys<ym){ys-=8;ym+=8} else {ys+=8;ym-=8} }
+    drawLab(labMa, ym, '#1565c0');
+    drawLab(labSpot, ys, '#f7931a');
+  }
+  ctx.fillStyle=th.muted||th.text; ctx.font='10px Verdana,Arial,sans-serif';
+  ctx.textAlign='left'; ctx.textBaseline='bottom';
+  const src='Data: Bitcoin daily close ÷ COMEX gold (Yahoo GC=F, goldUSD), ounces per bitcoin. 200-week MA of Sunday closes. Excludes fees.';
+  ctx.fillText(src, padL, h-6, w-padL-8);
+}
+function renderBtcGold200wTools(host, opts){
+  const bar=document.createElement('div');
+  bar.className='dca-tools';
+  bar.innerHTML=
+    '<div class="btcgold-presets" role="group" aria-label="Range">'+
+      '<button type="button" data-bgw="2019"'+(opts.all?'':' class="on"')+'>Since 2019</button>'+
+      '<button type="button" data-bgw="all"'+(opts.all?' class="on"':'')+'>All</button>'+
+    '</div>'+
+    '<span class="dca-note">200-week average of Sunday closes, in ounces of gold per bitcoin.</span>';
+  host.appendChild(bar);
+  bar.querySelectorAll('[data-bgw]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      if(window.lastScout&&window.lastScout.kind==='btcgold200w'){
+        window.lastScout.opts={all:btn.getAttribute('data-bgw')==='all'};
+        if(window._bg200wRedraw) window._bg200wRedraw();
+        bar.querySelectorAll('[data-bgw]').forEach(b=>b.classList.toggle('on', b===btn));
+      }
+    });
+  });
+}
+async function renderBtcGold200wView(){
+  clearCharts();
+  document.body.classList.add('scout-view','scout-btcgold200w');
+  $('charts').classList.remove('has-volume');
+  const m0=typeof currentMarket==='function'?currentMarket():'combinedUSD';
+  const m=(typeof isBtcMarket==='function'&&isBtcMarket(m0))?m0:'combinedUSD';
+  let btc=[], goldRows=[];
+  try{ btc=(await getDaily(m)).map(toBar).filter(b=>b&&b.close>0); }
+  catch(e){status('Error loading Bitcoin history: '+e.message);return}
+  try{ goldRows=await getDaily('goldUSD'); }
+  catch(e){status('Error loading gold history: '+e.message);return}
+  const pack=computeBtcGold200w(btc, goldRows);
+  const prev=window.lastScout;
+  const opts={all:prev&&prev.kind==='btcgold200w'?!!prev.opts.all:false};
+  const last=pack.lastDaily, lastMa=pack.lastMa;
+  const title="BTC's 200-Week Trend in Gold";
+  window.lastScout={kind:'btcgold200w', market:m, pack, opts, title};
+  const main=$('main'); main.innerHTML=''; $('subs').innerHTML='';
+  if(typeof setEpochLegend==='function') setEpochLegend(false);
+  if(!pack.daily.length){
+    const msg=document.createElement('p'); msg.className='btcgold-empty';
+    msg.textContent='Not enough overlapping Bitcoin and gold history.';
+    main.appendChild(msg); status('Not enough Bitcoin / gold overlap.'); return;
+  }
+  const att=attachPaintCanvas(main,(ctx,w,h)=>paintBtcGold200w(ctx,w,h,pack,window.lastScout.opts));
+  window._bg200wRedraw=att&&att.redraw;
+  renderBtcGold200wTools($('subs'), opts);
+  const bits=[];
+  if(last) bits.push('BTC/Gold '+formatBgOzLabel(last.close)+' on '+(typeof isoUTC==='function'?isoUTC(last.time):''));
+  if(lastMa) bits.push('200W MA '+formatBgOzLabel(lastMa.ma)+' (week of '+(typeof isoUTC==='function'?isoUTC(lastMa.time):'')+')');
+  if(pack.below!=null) bits.push((pack.below>=0?Math.round(pack.below)+'% below':Math.round(-pack.below)+'% above')+' the MA');
+  status(bits.join('  ·  ')+'  ·  '+(typeof marketLabel==='function'?marketLabel(m):m));
+  const note=$('sourceNote');
+  if(note){
+    const splice=(m==='combinedUSD'&&typeof SPLICE==='string')?(SPLICE+' '):'';
+    note.textContent=splice+'Daily Bitcoin close divided by the COMEX gold continuous futures close (Yahoo GC=F, the site’s goldUSD series), in ounces of gold per bitcoin. The 200-week average uses Sunday closes of that ratio. White dots mark the last completed Sunday on or before each November 23, and the label is that week’s moving average versus the same week a year earlier. Default window is October 2019 to now. Chart idea: @AdamBLiv.';
+  }
+}
+window.renderBtcGold200wView=renderBtcGold200wView;
+window.computeBtcGold200w=computeBtcGold200w;
+window.formatBgYoy=formatBgYoy;

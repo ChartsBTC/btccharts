@@ -65,11 +65,13 @@
       {id:'sma-100w', label:'100-week SMA', set:{vt:'pricema',pma:'100w',pmm:'panel',r:'',i:'Daily'}},
       {id:'sma-osc', label:'MA percentile oscillator', set:{vt:'pricema',pma:'200d',pmm:'osc',r:'',i:'Daily'}}
     ]},
-    {name:'Macro', items:[
+    {name:'Macro', more:'More macro', items:[
       {id:'btc-gold', label:'Bitcoin / Gold', set:{vt:'btcgold',r:'',i:'Daily',t:'C',l:true}},
+      {id:'btc-gold-200w', label:'200-week trend in gold', set:{vt:'btcgold200w',r:'',i:'Daily'}},
       {id:'btc-spx', label:'Bitcoin / S&P 500', set:{cm:'spx',r:'',i:'Daily',t:'C',l:true}},
       {id:'btc-cpi', label:'Bitcoin / CPI', set:{cm:'cpiAUCSL',r:'',i:'Daily',t:'C',l:true}},
-      {id:'gold', label:'Gold', set:{m:'goldUSD',r:'',i:'Daily',t:'C',l:true}},
+      {id:'gold', label:'Gold', set:{m:'goldUSD',r:'',i:'Daily',t:'C',l:true}}
+    ], extra:[
       {id:'spx', label:'S&P 500', set:{m:'spx',r:'',i:'Daily',t:'C',l:true}},
       {id:'spxgold', label:'S&P 500 vs Gold', set:{sp:'spxgold'}}
     ]}
