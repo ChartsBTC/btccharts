@@ -1096,6 +1096,10 @@ async function renderScout(kind){
     if(typeof isV2Page==='function'&&!isV2Page()) return false;
     await renderDcaView();return true
   }
+  if(kind==='drawdownhalving'){
+    if(typeof isV2Page==='function'&&!isV2Page()) return false;
+    await renderDrawdownHalvingView();return true
+  }
   if(kind==='200wnevrdown'){
     if(typeof isV2Page==='function'&&!isV2Page()) return false;
     await renderNeverDownView();return true
@@ -5288,3 +5292,273 @@ async function renderBtcGold200wView(){
 window.renderBtcGold200wView=renderBtcGold200wView;
 window.computeBtcGold200w=computeBtcGold200w;
 window.formatBgYoy=formatBgYoy;
+
+function formatDhPct(dd){
+  if(dd==null||!isFinite(dd)) return '';
+  if(Math.abs(dd)<0.05) return '0%';
+  return (dd>0?'+':'−')+Math.round(Math.abs(dd))+'%';
+}
+function daysUntilHalving(t, hvTime){
+  return Math.round((hvTime-t)/86400);
+}
+function computeDrawdownHalving(daily){
+  const cycles=typeof detectCycles==='function'?detectCycles(daily):[];
+  const halvings=(typeof HALVINGS!=='undefined'?HALVINGS:[]);
+  const next=(typeof HM_NEXT_HALVING!=='undefined')?HM_NEXT_HALVING:{time:Date.UTC(2028,3,17)/1000,label:'2028-04-17 (est.)'};
+  const specs=[
+    {label:'2015', peakYear:2013, hv:halvings[1], color:'#bdbdbd', darkColor:'#e0e0e0', current:false},
+    {label:'2018', peakYear:2017, hv:halvings[2], color:'#9e9e9e', darkColor:'#bdbdbd', current:false},
+    {label:'2022', peakYear:2021, hv:halvings[3], color:'#616161', darkColor:'#9e9e9e', current:false},
+    {label:'Today', peakYear:2025, hv:next, color:'#f7931a', darkColor:'#f7931a', current:true}
+  ];
+  const last=daily&&daily.length?daily[daily.length-1]:null;
+  const series=[];
+  for(const spec of specs){
+    if(!spec.hv) continue;
+    const cyc=cycles.find(c=>c.year===spec.peakYear);
+    if(!cyc||!cyc.high||!(cyc.high.price>0)) continue;
+    const ath=cyc.high.price;
+    const t0=cyc.high.time;
+    const t1=spec.current?(last?last.time:t0):spec.hv.time;
+    const pts=[];
+    let trough=null;
+    for(const b of daily){
+      if(b.time<t0||b.time>t1) continue;
+      const px=(typeof effectiveLow==='function'?effectiveLow(b):b.low);
+      if(!(px>0)) continue;
+      const pt={
+        time:b.time,
+        date:typeof isoUTC==='function'?isoUTC(b.time):'',
+        days:daysUntilHalving(b.time, spec.hv.time),
+        price:px,
+        close:b.close,
+        dd:(px/ath-1)*100
+      };
+      pts.push(pt);
+      if(!trough||px<trough.price) trough=pt;
+    }
+    series.push({
+      label:spec.label,
+      peakYear:spec.peakYear,
+      color:spec.color,
+      darkColor:spec.darkColor,
+      current:!!spec.current,
+      estimated:!!spec.current,
+      hv:spec.hv,
+      ath,
+      athDate:cyc.high.date,
+      athClose:cyc.high.close,
+      pts,
+      trough,
+      last:pts.length?pts[pts.length-1]:null
+    });
+  }
+  const pastLows=series.filter(s=>!s.current&&s.trough);
+  const band=pastLows.length?{
+    minDays:Math.min.apply(null, pastLows.map(s=>s.trough.days)),
+    maxDays:Math.max.apply(null, pastLows.map(s=>s.trough.days))
+  }:null;
+  const title=band
+    ?('Bitcoin bottomed '+band.minDays+' to '+band.maxDays+' days before each halving')
+    :'Bitcoin drawdown from cycle ATH vs days until the next halving';
+  return {series, band, last, next, cur:series.find(s=>s.current)||null, title};
+}
+function paintDrawdownHalving(ctx,w,h,pack){
+  const th=T();
+  const dark=typeof isDark==='function'&&isDark();
+  ctx.fillStyle=th.bg; ctx.fillRect(0,0,w,h);
+  const small=w<560;
+  const series=pack.series||[];
+  const padL=small?48:62, padR=small?16:28, top=small?58:72, bottom=small?86:100;
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle=th.title||th.text;
+  ctx.font='bold '+(small?13:18)+'px Verdana,Arial,sans-serif';
+  ctx.fillText(pack.title||'Bitcoin drawdown from cycle ATH', padL, 10, w-padL-padR);
+  ctx.fillStyle=th.muted||th.text; ctx.font=(small?10:12)+'px Verdana,Arial,sans-serif';
+  ctx.fillText('Drawdown from each cycle’s own all-time high', padL, small?30:36, w-padL-padR);
+  const pw=w-padL-padR, ph=h-top-bottom;
+  if(pw<60||ph<60) return;
+  const xMin=0, xMax=1000, yMin=-90, yMax=0;
+  const X=d=>padL+(xMax-d)/(xMax-xMin)*pw;
+  const Y=dd=>{
+    const v=Math.max(yMin-2, Math.min(yMax+1, dd));
+    return top+(yMax-v)/(yMax-yMin)*ph;
+  };
+  // Past-lows band
+  if(pack.band){
+    const x0=X(pack.band.maxDays), x1=X(pack.band.minDays);
+    ctx.fillStyle=dark?'rgba(247,147,26,0.16)':'rgba(247,147,26,0.14)';
+    ctx.fillRect(Math.min(x0,x1), top, Math.abs(x1-x0), ph);
+    ctx.fillStyle=dark?'#ffd49a':th.text;
+    ctx.font=(small?'bold 10px':'bold 11px')+' Verdana,Arial,sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillText('Past lows', (x0+x1)/2, top+6);
+  }
+  // Grid
+  ctx.font='11px Verdana,Arial,sans-serif';
+  ctx.textBaseline='middle';
+  for(const v of [0,-25,-50,-75,-90]){
+    const y=Math.round(Y(v))+0.5;
+    ctx.strokeStyle=th.grid; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(padL+pw,y); ctx.stroke();
+    ctx.fillStyle=th.text; ctx.textAlign='right';
+    ctx.fillText(v===0?'0% (ATH)':(v+'%'), padL-6, y);
+  }
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  for(const d of [1000,750,500,250,0]){
+    const x=Math.round(X(d))+0.5;
+    ctx.strokeStyle=th.grid; ctx.beginPath(); ctx.moveTo(x,top); ctx.lineTo(x,top+ph); ctx.stroke();
+    ctx.fillStyle=th.text;
+    ctx.fillText(d===0?'Halving':String(d), x, top+ph+6);
+  }
+  ctx.strokeStyle=th.border; ctx.lineWidth=1; ctx.strokeRect(padL+0.5,top+0.5,pw,ph);
+  // Lines, oldest first so orange sits on top
+  ctx.save(); ctx.beginPath(); ctx.rect(padL,top,pw,ph); ctx.clip();
+  for(const s of series){
+    if(!s.pts||s.pts.length<2) continue;
+    ctx.strokeStyle=dark?s.darkColor:s.color;
+    ctx.lineWidth=s.current?2.8:1.6;
+    ctx.lineJoin='round'; ctx.lineCap='round';
+    ctx.beginPath();
+    s.pts.forEach((p,i)=>{
+      const x=X(p.days), y=Y(p.dd);
+      if(i) ctx.lineTo(x,y); else ctx.moveTo(x,y);
+    });
+    ctx.stroke();
+  }
+  ctx.restore();
+  // Low dots + year labels (past cycles) and Today
+  const lowLabs=[];
+  for(const s of series){
+    if(!s.current && s.trough){
+      const x=X(s.trough.days), y=Y(s.trough.dd);
+      if(x>=padL-2&&x<=padL+pw+2){
+        ctx.fillStyle='#fff'; ctx.strokeStyle=dark?'#eee':'#333'; ctx.lineWidth=1.5;
+        ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2); ctx.fill(); ctx.stroke();
+        lowLabs.push({x,y,text:s.label});
+      }
+    }
+  }
+  lowLabs.sort((a,b)=>a.y-b.y);
+  const minGap=16;
+  for(let i=1;i<lowLabs.length;i++){
+    if(lowLabs[i].y<lowLabs[i-1].y+minGap) lowLabs[i].y=lowLabs[i-1].y+minGap;
+  }
+  const overflow=lowLabs.length?lowLabs[lowLabs.length-1].y-(top+ph-8):0;
+  if(overflow>0) for(const L of lowLabs) L.y-=overflow;
+  if(lowLabs[0]&&lowLabs[0].y<top+8){
+    const shift=top+8-lowLabs[0].y;
+    for(const L of lowLabs) L.y+=shift;
+  }
+  ctx.font=(small?'bold 11px':'bold 13px')+' Verdana,Arial,sans-serif';
+  ctx.textAlign='right'; ctx.textBaseline='middle';
+  for(const L of lowLabs){
+    const tw=ctx.measureText(L.text).width;
+    const lx=Math.max(L.x-10, padL+tw+4);
+    ctx.fillStyle=th.boxBg||th.bg;
+    ctx.fillRect(lx-tw-2, L.y-8, tw+4, 16);
+    ctx.fillStyle=th.text;
+    ctx.fillText(L.text, lx, L.y);
+  }
+  for(const s of series){
+    if(s.current&&s.last){
+      const x=X(s.last.days), y=Y(s.last.dd);
+      ctx.fillStyle='#f7931a'; ctx.strokeStyle='#fff'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(x,y,6,0,Math.PI*2); ctx.fill(); ctx.stroke();
+      ctx.font=(small?'bold 11px':'bold 12px')+' Verdana,Arial,sans-serif';
+      ctx.textAlign='left'; ctx.textBaseline='middle';
+      const lab='Today';
+      let lx=x+10, ly=y;
+      if(lx+40>padL+pw){ lx=x-10; ctx.textAlign='right'; }
+      const tw=ctx.measureText(lab).width;
+      const boxX=ctx.textAlign==='right'?lx-tw-2:lx-2;
+      ctx.fillStyle=th.boxBg||th.bg;
+      ctx.fillRect(boxX, ly-8, tw+4, 16);
+      ctx.fillStyle='#f7931a';
+      ctx.fillText(lab, lx, ly);
+    }
+  }
+  // Stats row, centered under the plot so it is not read as x-axis labels
+  const stats=series.map(s=>{
+    const pt=s.current?s.last:s.trough;
+    if(!pt) return null;
+    return {head:s.current?'Today':s.label, body:pt.days+' days  '+formatDhPct(pt.dd), current:!!s.current};
+  }).filter(Boolean);
+  const statsY=top+ph+28;
+  const gap=small?16:36;
+  ctx.font=(small?'bold 10px':'bold 13px')+' Verdana,Arial,sans-serif';
+  const widths=stats.map(st=>ctx.measureText(st.head+'  '+st.body).width);
+  const total=widths.reduce((a,b)=>a+b,0)+gap*(stats.length-1);
+  let sx=padL+Math.max(0,(pw-total)/2);
+  if(small&&total>pw){
+    // two lines on narrow screens
+    const mid=Math.ceil(stats.length/2);
+    const rowW=arr=>arr.reduce((a,b)=>a+b,0)+gap*(arr.length-1);
+    const drawRow=(items,widthsRow,y)=>{
+      let x=padL+Math.max(0,(pw-rowW(widthsRow))/2);
+      items.forEach((st,i)=>{
+        ctx.textAlign='left'; ctx.textBaseline='top';
+        ctx.fillStyle=st.current?'#f7931a':th.text;
+        ctx.font=(small?'bold 10px':'bold 13px')+' Verdana,Arial,sans-serif';
+        const head=st.head+'  ';
+        ctx.fillText(head, x, y);
+        x+=ctx.measureText(head).width;
+        ctx.font=(small?10:12)+'px Verdana,Arial,sans-serif';
+        ctx.fillText(st.body, x, y);
+        x+=ctx.measureText(st.body).width+gap;
+      });
+    };
+    drawRow(stats.slice(0,mid), widths.slice(0,mid), statsY);
+    drawRow(stats.slice(mid), widths.slice(mid), statsY+16);
+  }else{
+    stats.forEach((st)=>{
+      ctx.textAlign='left'; ctx.textBaseline='top';
+      ctx.fillStyle=st.current?'#f7931a':th.text;
+      ctx.font=(small?'bold 11px':'bold 13px')+' Verdana,Arial,sans-serif';
+      const head=st.head+'  ';
+      ctx.fillText(head, sx, statsY);
+      sx+=ctx.measureText(head).width;
+      ctx.font=(small?11:12)+'px Verdana,Arial,sans-serif';
+      ctx.fillText(st.body, sx, statsY);
+      sx+=ctx.measureText(st.body).width+gap;
+    });
+  }
+
+  ctx.fillStyle=th.muted||th.text; ctx.font='10px Verdana,Arial,sans-serif';
+  ctx.textAlign='left'; ctx.textBaseline='bottom';
+  const nextLab=(pack.next&&pack.next.label)||'2028-04-17 (est.)';
+  ctx.fillText('Intraday highs and lows. Next halving date is an estimate ('+nextLab+').', padL, h-6, w-padL-8);
+}
+async function renderDrawdownHalvingView(){
+  clearCharts();
+  document.body.classList.add('scout-view','scout-drawdownhalving');
+  $('charts').classList.remove('has-volume');
+  const m0=typeof currentMarket==='function'?currentMarket():'combinedUSD';
+  const m=(typeof isBtcMarket==='function'&&isBtcMarket(m0))?m0:'combinedUSD';
+  let daily=[];
+  try{ daily=(await getDaily(m)).map(toBar).filter(b=>b&&b.close>0); }
+  catch(e){status('Error loading Bitcoin history: '+e.message);return}
+  const pack=computeDrawdownHalving(daily);
+  const title=pack.title||'Bitcoin drawdown from cycle ATH vs days until the next halving';
+  window.lastScout={kind:'drawdownhalving', market:m, pack, title};
+  const main=$('main'); main.innerHTML=''; $('subs').innerHTML='';
+  if(typeof setEpochLegend==='function') setEpochLegend(false);
+  if(!pack.series.some(s=>s.pts&&s.pts.length>2)){
+    status('Not enough cycle history for this view.'); return;
+  }
+  attachPaintCanvas(main,(ctx,w,h)=>paintDrawdownHalving(ctx,w,h,pack));
+  const bits=pack.series.map(s=>{
+    const pt=s.current?s.last:s.trough;
+    return (s.current?'Today':s.label)+' '+(pt?pt.days+'d '+formatDhPct(pt.dd):'');
+  });
+  status(bits.join('  ·  ')+'  ·  '+(typeof marketLabel==='function'?marketLabel(m):m));
+  const note=$('sourceNote');
+  if(note){
+    const splice=(m==='combinedUSD'&&typeof SPLICE==='string')?(SPLICE+' '):'';
+    const cur=pack.cur, today=cur&&cur.last, troughs=pack.series.filter(s=>!s.current&&s.trough).map(s=>s.label+' '+s.trough.days+' days ('+formatDhPct(s.trough.dd)+' on '+s.trough.date+')');
+    note.textContent=splice+'Each line is that cycle’s drawdown from its own all-time high (intraday high) to each day’s effective low (the same wick filter as the Cycles view), aligned by days left until the next halving. Past cycles run from the 2013, 2017 and 2021 peaks to the 2016, 2020 and 2024 halvings; the current cycle runs from the 2025 peak to today. The next-halving estimate is '+((pack.next&&pack.next.label)||'2028-04-17 (est.)')+', the same 210,000-block / 10-minute estimate used on the cycle-low multiple view (the source post used about April 9, 2028). Past lows: '+(troughs.join(', ')||'—')+'. '+(today?('Today is '+today.days+' days before that estimate, '+formatDhPct(today.dd)+' from the 2025 high on '+today.date+'. '):'')+'Chart idea: @IIICapital.';
+  }
+}
+window.renderDrawdownHalvingView=renderDrawdownHalvingView;
+window.computeDrawdownHalving=computeDrawdownHalving;
+window.formatDhPct=formatDhPct;

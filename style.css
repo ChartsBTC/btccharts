@@ -446,6 +446,7 @@ body.page-v2 #viewToggle button:disabled{opacity:.45;cursor:not-allowed}
   body.page-v2.scout-dca #main{height:min(560px,80vh) !important}
   body.page-v2.scout-halvingmultiple #main{height:min(600px,85vh) !important}
   body.page-v2.scout-btcgold200w #main{height:min(600px,85vh) !important}
+  body.page-v2.scout-drawdownhalving #main{height:min(600px,85vh) !important}
 }
 
 /* v2: keep Cycles and Spiral visible but disabled (with a tooltip) when the symbol is not Bitcoin. */
@@ -669,3 +670,5 @@ body.scout-halvingmultiple #main{height:580px}
 body.scout-halvingmultiple #scaleToggle,body.scout-halvingmultiple #markerBox,body.scout-halvingmultiple #ratioBox,body.scout-halvingmultiple #ratioLogBox{display:none}
 body.scout-btcgold200w #main{height:560px}
 body.scout-btcgold200w #scaleToggle,body.scout-btcgold200w #markerBox,body.scout-btcgold200w #ratioBox,body.scout-btcgold200w #ratioLogBox{display:none}
+body.scout-drawdownhalving #main{height:580px}
+body.scout-drawdownhalving #scaleToggle,body.scout-drawdownhalving #markerBox,body.scout-drawdownhalving #ratioBox,body.scout-drawdownhalving #ratioLogBox{display:none}
