@@ -1100,6 +1100,10 @@ async function renderScout(kind){
     if(typeof isV2Page==='function'&&!isV2Page()) return false;
     await renderDrawdownHalvingView();return true
   }
+  if(kind==='floorstaircase'){
+    if(typeof isV2Page==='function'&&!isV2Page()) return false;
+    await renderFloorStaircaseView();return true
+  }
   if(kind==='200wnevrdown'){
     if(typeof isV2Page==='function'&&!isV2Page()) return false;
     await renderNeverDownView();return true
@@ -5562,3 +5566,250 @@ async function renderDrawdownHalvingView(){
 window.renderDrawdownHalvingView=renderDrawdownHalvingView;
 window.computeDrawdownHalving=computeDrawdownHalving;
 window.formatDhPct=formatDhPct;
+
+function formatFloorPrice(px){
+  if(!(px>0)) return '';
+  if(typeof usd==='function') return '$'+usd(px);
+  if(px>=1000) return '$'+Math.round(px).toLocaleString('en-US');
+  return '$'+(+px.toPrecision(3));
+}
+function formatFloorMult(x){
+  if(!(x>0)||!isFinite(x)) return '';
+  if(x>=100) return Math.round(x)+'×';
+  if(x>=10) return (Math.round(x*10)/10).toFixed(1).replace(/\.0$/,'')+'×';
+  return (Math.round(x*10)/10).toFixed(1)+'×';
+}
+function computeFloorStaircase(daily){
+  const cycles=typeof detectCycles==='function'?detectCycles(daily):[];
+  const lows=[];
+  for(const c of cycles){
+    if(!c.endLow||!(c.endLow.price>0)) continue;
+    lows.push({
+      time:c.endLow.time,
+      date:c.endLow.date,
+      price:c.endLow.price,
+      close:c.endLow.close,
+      year:new Date(c.endLow.time*1000).getUTCFullYear(),
+      soFar:!!c.lowSoFar,
+      cycleYear:c.year
+    });
+  }
+  lows.sort((a,b)=>a.time-b.time);
+  // Start at the 2011 cycle low (~$2), not the 2010 open.
+  const firstYear=2011;
+  const floors=lows.filter(l=>l.year>=firstYear);
+  for(let i=0;i<floors.length;i++){
+    const prev=i?floors[i-1]:null;
+    floors[i].mult=prev&&prev.price>0?floors[i].price/prev.price:null;
+    floors[i].prev=prev;
+  }
+  const lastBar=daily&&daily.length?daily[daily.length-1]:null;
+  return {daily, floors, lastBar, last:floors.length?floors[floors.length-1]:null};
+}
+function paintFloorStaircase(ctx,w,h,pack){
+  const th=T();
+  const dark=typeof isDark==='function'&&isDark();
+  ctx.fillStyle=th.bg; ctx.fillRect(0,0,w,h);
+  const small=w<560;
+  const floors=pack.floors||[];
+  const daily=pack.daily||[];
+  const padL=small?48:66, padR=small?18:28, top=small?58:72, bottom=small?44:50;
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle=th.title||th.text;
+  ctx.font='bold '+(small?14:18)+'px Verdana,Arial,sans-serif';
+  ctx.fillText("Bitcoin's floor keeps rising", padL, 10, w-padL-padR);
+  ctx.fillStyle=th.muted||th.text; ctx.font=(small?10:12)+'px Verdana,Arial,sans-serif';
+  ctx.fillText('Cycle lows. Intraday. Log scale.', padL, small?30:36, w-padL-padR);
+  const pw=w-padL-padR, ph=h-top-bottom;
+  if(pw<60||ph<60||!daily.length) return;
+  const tStart=Math.min(daily[0].time, Date.UTC(2010,0,1)/1000);
+  const t0=tStart, t1=daily[daily.length-1].time;
+  let lo=Infinity, hi=-Infinity;
+  for(const b of daily){
+    if(b.close>0){lo=Math.min(lo,b.close); hi=Math.max(hi,b.close)}
+    const px=typeof effectiveLow==='function'?effectiveLow(b):b.low;
+    if(px>0) lo=Math.min(lo,px);
+  }
+  for(const f of floors){ if(f.price>0){lo=Math.min(lo,f.price); hi=Math.max(hi,f.price)} }
+  lo=Math.max(lo/1.4, 0.03); hi=hi*1.55;
+  const L0=Math.log10(lo), L1=Math.log10(hi);
+  const X=t=>padL+(t-t0)/Math.max(1,t1-t0)*pw;
+  const Y=v=>{
+    const c=Math.min(Math.max(v,lo*0.5),hi*2);
+    return top+(1-(Math.log10(c)-L0)/(L1-L0))*ph;
+  };
+  // grid
+  ctx.font='11px Verdana,Arial,sans-serif';
+  ctx.textBaseline='middle';
+  const yTicks=[0.05,0.1,0.2,0.5,1,2,5,10,20,50,100,200,500,1000,2000,5000,10000,20000,50000,100000,200000];
+  for(const v of yTicks){
+    if(v<lo*0.98||v>hi*1.02) continue;
+    const y=Math.round(Y(v))+0.5;
+    ctx.strokeStyle=th.grid; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(padL+pw,y); ctx.stroke();
+    ctx.fillStyle=th.text; ctx.textAlign='right';
+    const lab=v>=1000?('$'+Math.round(v/1000)+'k'):('$'+String(v));
+    ctx.fillText(lab, padL-6, y);
+  }
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  const y0=new Date(t0*1000).getUTCFullYear(), y1=new Date(t1*1000).getUTCFullYear();
+  const yStep=small?4:(y1-y0>12?2:1);
+  for(let y=y0;y<=y1;y++){
+    const t=Date.UTC(y,0,1)/1000;
+    if(t<t0||t>t1) continue;
+    const x=Math.round(X(t))+0.5;
+    ctx.strokeStyle=th.grid; ctx.beginPath(); ctx.moveTo(x,top); ctx.lineTo(x,top+ph); ctx.stroke();
+    if((y-y0)%yStep===0 || y===y1){
+      ctx.fillStyle=th.text; ctx.fillText(String(y), x, top+ph+6);
+    }
+  }
+  ctx.strokeStyle=th.border; ctx.lineWidth=1; ctx.strokeRect(padL+0.5,top+0.5,pw,ph);
+  // Build the step path through today
+  const lastT=t1;
+  const step=[];
+  if(floors.length){
+    step.push({time:floors[0].time, price:floors[0].price});
+    for(let i=1;i<floors.length;i++){
+      step.push({time:floors[i].time, price:floors[i-1].price, riser:true, floor:floors[i]});
+      step.push({time:floors[i].time, price:floors[i].price});
+    }
+    const last=floors[floors.length-1];
+    if(lastT>last.time) step.push({time:lastT, price:last.price});
+  }
+  ctx.save(); ctx.beginPath(); ctx.rect(padL,top,pw,ph); ctx.clip();
+  // shaded area under the floor
+  if(step.length>=2){
+    ctx.beginPath();
+    ctx.moveTo(X(step[0].time), Y(step[0].price));
+    for(let i=1;i<step.length;i++) ctx.lineTo(X(step[i].time), Y(step[i].price));
+    ctx.lineTo(X(step[step.length-1].time), top+ph);
+    ctx.lineTo(X(step[0].time), top+ph);
+    ctx.closePath();
+    ctx.fillStyle=dark?'rgba(247,147,26,0.22)':'rgba(247,147,26,0.16)';
+    ctx.fill();
+  }
+  // thin grey price history (daily close)
+  ctx.strokeStyle=dark?'#9e9e9e':'#9e9e9e';
+  ctx.lineWidth=1; ctx.beginPath();
+  let started=false;
+  for(const b of daily){
+    if(!(b.close>0)) continue;
+    const x=X(b.time), y=Y(b.close);
+    if(started) ctx.lineTo(x,y); else {ctx.moveTo(x,y); started=true}
+  }
+  ctx.stroke();
+  // step line
+  if(step.length>=2){
+    ctx.strokeStyle='#f7931a'; ctx.lineWidth=2.4; ctx.lineJoin='miter'; ctx.lineCap='butt';
+    ctx.beginPath();
+    step.forEach((p,i)=>{const x=X(p.time), y=Y(p.price); if(i) ctx.lineTo(x,y); else ctx.moveTo(x,y)});
+    ctx.stroke();
+  }
+  ctx.restore();
+  // Orange dots + price/year labels
+  const labs=floors.map(f=>({
+    x:X(f.time), y:Y(f.price), floor:f,
+    head:formatFloorPrice(f.price),
+    sub:f.soFar?(f.year+' low so far'):String(f.year)
+  })).filter(L=>L.x>=padL-6&&L.x<=padL+pw+6);
+  for(const L of labs){
+    ctx.fillStyle='#f7931a'; ctx.strokeStyle='#fff'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(L.x,L.y,6.5,0,Math.PI*2); ctx.fill(); ctx.stroke();
+  }
+  ctx.textAlign='left';
+  const boxes=[];
+  for(const L of labs){
+    const headSize=small?12:16, subSize=small?9:11;
+    ctx.font='bold '+headSize+'px Verdana,Arial,sans-serif';
+    const hw=ctx.measureText(L.head).width;
+    ctx.font=subSize+'px Verdana,Arial,sans-serif';
+    const sw=ctx.measureText(L.sub).width;
+    const tw=Math.max(hw,sw);
+    const thh=headSize+subSize+6;
+    let lx=L.x+10, ly=L.y-18;
+    if(lx+tw>padL+pw-4) lx=L.x-10-tw;
+    if(lx<padL+2) lx=padL+2;
+    if(ly<headSize+subSize+top+4) ly=L.y+14;
+    // Nudge earlier labels left or down if they would cover a later one (2022 vs 2026).
+    for(const b of boxes){
+      const overlap=lx<b.lx+b.tw+8 && lx+tw+8>b.lx && ly<b.ly+b.th+4 && ly+thh+4>b.ly;
+      if(overlap){
+        if(L.x>=b.x) lx=Math.max(padL+2, b.lx-tw-10);
+        else ly=b.ly+b.th+4;
+      }
+    }
+    boxes.push({lx,ly,tw,th:thh,x:L.x});
+    ctx.fillStyle=th.boxBg||th.bg;
+    ctx.fillRect(lx-3, ly-2, tw+6, thh);
+    ctx.fillStyle=th.title||th.text;
+    ctx.font='bold '+headSize+'px Verdana,Arial,sans-serif';
+    ctx.textBaseline='top';
+    ctx.fillText(L.head, lx, ly);
+    ctx.fillStyle=L.floor.soFar?'#f7931a':(th.muted||th.text);
+    ctx.font=(L.floor.soFar?'bold ':'')+subSize+'px Verdana,Arial,sans-serif';
+    ctx.fillText(L.sub, lx, ly+headSize+1);
+  }
+  // Multiple labels last, dodging the price/year boxes
+  ctx.font=(small?'bold 11px':'bold 13px')+' Verdana,Arial,sans-serif';
+  ctx.textAlign='left'; ctx.textBaseline='middle';
+  for(let i=1;i<floors.length;i++){
+    const cur=floors[i], prev=floors[i-1];
+    if(!(cur.mult>0)) continue;
+    const x=X(cur.time);
+    const y=(Y(prev.price)+Y(cur.price))/2;
+    const lab=formatFloorMult(cur.mult);
+    const tw=ctx.measureText(lab).width;
+    const nearRight=x>padL+pw*0.72;
+    let lx=nearRight?x-14-tw:x+8;
+    let ly=Math.min(Math.max(y, top+12), top+ph-12);
+    const overlaps=()=>boxes.some(b=>lx<b.lx+b.tw+6 && lx+tw+6>b.lx && ly-8<b.ly+b.th+4 && ly+8>b.ly);
+    let guard=0;
+    while(overlaps()&&guard++<20){
+      if(nearRight) lx-=12;
+      else ly+=12;
+    }
+    lx=Math.min(Math.max(lx, padL+4), padL+pw-tw-6);
+    ctx.fillStyle=th.boxBg||th.bg;
+    ctx.fillRect(lx-2, ly-8, tw+4, 16);
+    ctx.fillStyle='#f7931a';
+    ctx.fillText(lab, lx, ly);
+  }
+  ctx.fillStyle=th.muted||th.text; ctx.font='10px Verdana,Arial,sans-serif';
+  ctx.textAlign='left'; ctx.textBaseline='bottom';
+  ctx.fillText('Intraday cycle lows (same wick filter as the Cycles view). Last step is the current-cycle low so far.', padL, h-6, w-padL-8);
+}
+async function renderFloorStaircaseView(){
+  clearCharts();
+  document.body.classList.add('scout-view','scout-floorstaircase');
+  $('charts').classList.remove('has-volume');
+  const m0=typeof currentMarket==='function'?currentMarket():'combinedUSD';
+  const m=(typeof isBtcMarket==='function'&&isBtcMarket(m0))?m0:'combinedUSD';
+  let daily=[];
+  try{ daily=(await getDaily(m)).map(toBar).filter(b=>b&&b.close>0); }
+  catch(e){status('Error loading Bitcoin history: '+e.message);return}
+  const pack=computeFloorStaircase(daily);
+  const title="Bitcoin's floor keeps rising";
+  window.lastScout={kind:'floorstaircase', market:m, pack, title};
+  const main=$('main'); main.innerHTML=''; $('subs').innerHTML='';
+  if(typeof setEpochLegend==='function') setEpochLegend(false);
+  if(pack.floors.length<2){
+    status('Not enough cycle lows for this view.'); return;
+  }
+  attachPaintCanvas(main,(ctx,w,h)=>paintFloorStaircase(ctx,w,h,pack));
+  const bits=pack.floors.map(f=>formatFloorPrice(f.price)+' ('+f.year+(f.soFar?' so far':'')+')'+(f.mult?('  '+formatFloorMult(f.mult)):'') );
+  status(bits.join('  →  ')+'  ·  '+(typeof marketLabel==='function'?marketLabel(m):m));
+  const note=$('sourceNote');
+  if(note){
+    const splice=(m==='combinedUSD'&&typeof SPLICE==='string')?(SPLICE+' '):'';
+    const last=pack.last;
+    const chain=pack.floors.map((f,i)=>{
+      const bit=formatFloorPrice(f.price)+' on '+f.date+(f.soFar?' (low so far)':'');
+      return i&&f.mult?(bit+', '+formatFloorMult(f.mult)+' the previous low'):bit;
+    }).join('; ');
+    note.textContent=splice+'The grey line is the daily close. The orange staircase is the cycle-low floor, using each completed cycle’s intraday low (the same effectiveLow wick filter as the Cycles view), starting at the 2011 low. The last step is the current cycle’s low so far and will move if a new low prints. Lows: '+chain+'. Chart idea: @PiusSprenger.';
+  }
+}
+window.renderFloorStaircaseView=renderFloorStaircaseView;
+window.computeFloorStaircase=computeFloorStaircase;
+window.formatFloorPrice=formatFloorPrice;
+window.formatFloorMult=formatFloorMult;

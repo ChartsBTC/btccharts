@@ -29,6 +29,7 @@
       {id:'cycles-align-high', label:'Aligned by cycle high', set:{cy:true,ca:'high',cp:'usd',r:'',i:'Daily'}},
       {id:'cycles-halving', label:'Aligned by halving', set:{cy:true,ca:'halving',cp:'usd',r:'',i:'Daily'}},
       {id:'halvingmultiple', label:'Cycle-low multiple from halving', set:{vt:'halvingmultiple',r:'',i:'Daily'}},
+      {id:'floorstaircase', label:"Bitcoin's floor keeps rising", set:{vt:'floorstaircase',r:'',i:'Daily'}},
       {id:'cycles-calendar', label:'Aligned to 4-year calendar', set:{cy:true,ca:'calendar',cp:'usd',r:'',i:'Daily'}},
       {id:'spiral-2011', label:'Spiral from 2011', set:{vt:'spiral',sf:true,r:'',i:'Daily'}}
     ]},
